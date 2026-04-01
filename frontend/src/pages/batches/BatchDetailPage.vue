@@ -201,18 +201,110 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
           </div>
 
           <template v-if="parseSummaryContent(s.content)">
-            <div class="space-y-3 text-sm">
+            <div class="space-y-4 text-sm">
+              <!-- Summary text -->
               <p v-if="parseSummaryContent(s.content)!.summary_text" class="text-gray-700 leading-relaxed">
                 {{ parseSummaryContent(s.content)!.summary_text }}
               </p>
-              <div v-if="parseSummaryContent(s.content)!.top_recommendations?.length" class="mt-2">
-                <p class="font-medium text-gray-800 mb-1">Рекомендации:</p>
+
+              <!-- Stats row -->
+              <div class="flex gap-4 flex-wrap">
+                <div v-if="parseSummaryContent(s.content)!.total_calls" class="bg-gray-50 rounded-lg px-3 py-2">
+                  <p class="text-xs text-gray-500">Звонков</p>
+                  <p class="text-lg font-semibold text-gray-900">{{ parseSummaryContent(s.content)!.total_calls }}</p>
+                </div>
+                <div v-if="parseSummaryContent(s.content)!.avg_score != null" class="bg-gray-50 rounded-lg px-3 py-2">
+                  <p class="text-xs text-gray-500">Средний балл</p>
+                  <p class="text-lg font-semibold" :class="parseSummaryContent(s.content)!.avg_score >= 70 ? 'text-green-600' : parseSummaryContent(s.content)!.avg_score >= 50 ? 'text-yellow-600' : 'text-red-600'">
+                    {{ Math.round(parseSummaryContent(s.content)!.avg_score) }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Business process issues (internal) -->
+              <div v-if="parseSummaryContent(s.content)!.business_process_issues?.length">
+                <p class="font-medium text-gray-800 mb-2">Проблемы бизнес-процессов</p>
+                <div class="space-y-1.5">
+                  <div v-for="(issue, i) in parseSummaryContent(s.content)!.business_process_issues" :key="i"
+                    class="flex items-start gap-2">
+                    <span class="mt-1 w-2 h-2 rounded-full shrink-0"
+                      :class="issue.severity === 'high' ? 'bg-red-500' : issue.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'" />
+                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="text-gray-400 ml-1">({{ issue.frequency }} зв.)</span></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Communication issues (internal) -->
+              <div v-if="parseSummaryContent(s.content)!.communication_issues?.length">
+                <p class="font-medium text-gray-800 mb-2">Проблемы коммуникации</p>
+                <div class="space-y-1.5">
+                  <div v-for="(issue, i) in parseSummaryContent(s.content)!.communication_issues" :key="i"
+                    class="flex items-start gap-2">
+                    <span class="mt-1 w-2 h-2 rounded-full shrink-0"
+                      :class="issue.severity === 'high' ? 'bg-red-500' : issue.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'" />
+                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="text-gray-400 ml-1">({{ issue.frequency }} зв.)</span></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Manager performance (external) -->
+              <div v-if="parseSummaryContent(s.content)!.manager_performance?.length">
+                <p class="font-medium text-gray-800 mb-2">Производительность менеджеров</p>
+                <div class="space-y-2">
+                  <div v-for="(mgr, i) in parseSummaryContent(s.content)!.manager_performance" :key="i"
+                    class="bg-gray-50 rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="font-medium text-gray-900">{{ mgr.manager }}</span>
+                      <span class="text-xs text-gray-500">{{ mgr.calls_count }} зв. · ср. балл {{ Math.round(mgr.avg_score) }}</span>
+                    </div>
+                    <ul v-if="mgr.key_issues?.length" class="space-y-0.5">
+                      <li v-for="(iss, j) in mgr.key_issues" :key="j" class="text-gray-600 text-xs">• {{ iss }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Script adherence (external) -->
+              <div v-if="parseSummaryContent(s.content)!.script_adherence">
+                <p class="font-medium text-gray-800 mb-2">Следование скрипту</p>
+                <div class="bg-gray-50 rounded-lg p-3">
+                  <p v-if="parseSummaryContent(s.content)!.script_adherence.avg_adherence_percent != null" class="text-gray-700">
+                    Среднее следование: <span class="font-semibold">{{ parseSummaryContent(s.content)!.script_adherence.avg_adherence_percent }}%</span>
+                  </p>
+                  <div v-if="parseSummaryContent(s.content)!.script_adherence.most_skipped_criteria?.length" class="mt-1">
+                    <p class="text-xs text-gray-500">Чаще всего пропускают:</p>
+                    <ul class="mt-0.5 space-y-0.5">
+                      <li v-for="(cr, i) in parseSummaryContent(s.content)!.script_adherence.most_skipped_criteria" :key="i" class="text-gray-600 text-xs">• {{ cr }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recurring patterns (internal) -->
+              <div v-if="parseSummaryContent(s.content)!.recurring_patterns?.length">
+                <p class="font-medium text-gray-800 mb-1">Повторяющиеся паттерны</p>
+                <ul class="list-disc list-inside space-y-0.5 text-gray-600">
+                  <li v-for="(p, i) in parseSummaryContent(s.content)!.recurring_patterns" :key="i">{{ p }}</li>
+                </ul>
+              </div>
+
+              <!-- Common client complaints (external) -->
+              <div v-if="parseSummaryContent(s.content)!.common_client_complaints?.length">
+                <p class="font-medium text-gray-800 mb-1">Частые жалобы клиентов</p>
+                <ul class="list-disc list-inside space-y-0.5 text-gray-600">
+                  <li v-for="(c, i) in parseSummaryContent(s.content)!.common_client_complaints" :key="i">{{ c }}</li>
+                </ul>
+              </div>
+
+              <!-- Recommendations -->
+              <div v-if="parseSummaryContent(s.content)!.top_recommendations?.length">
+                <p class="font-medium text-gray-800 mb-1">Рекомендации</p>
                 <ul class="list-disc list-inside space-y-0.5 text-gray-600">
                   <li v-for="(rec, i) in parseSummaryContent(s.content)!.top_recommendations" :key="i">{{ rec }}</li>
                 </ul>
               </div>
-              <div v-if="parseSummaryContent(s.content)!.recommendations?.length" class="mt-2">
-                <p class="font-medium text-gray-800 mb-1">Рекомендации:</p>
+              <div v-else-if="parseSummaryContent(s.content)!.recommendations?.length">
+                <p class="font-medium text-gray-800 mb-1">Рекомендации</p>
                 <ul class="list-disc list-inside space-y-0.5 text-gray-600">
                   <li v-for="(rec, i) in parseSummaryContent(s.content)!.recommendations" :key="i">{{ rec }}</li>
                 </ul>
