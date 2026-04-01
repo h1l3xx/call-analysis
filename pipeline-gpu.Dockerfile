@@ -1,7 +1,7 @@
 # GPU-enabled single-stage Dockerfile for AI audio-call pipeline.
 # NVIDIA CUDA 12.4 + Python 3.12 (deadsnakes) + uv package manager.
 
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 LABEL maintainer="MalikovAI"
 LABEL description="Call Analytics — Whisper large-v3 (GPU) + pyannote diarization + quality analysis"
