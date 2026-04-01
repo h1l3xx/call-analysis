@@ -517,6 +517,18 @@ deploy_all() {
     backup_db || true
   fi
 
+  # Build backend JAR via Docker (host network for Maven/Gradle downloads)
+  if [[ ! -f "$ROOT_DIR/build/libs/malikov-backend.jar" ]] || [[ -n "$(find "$ROOT_DIR/src" -newer "$ROOT_DIR/build/libs/malikov-backend.jar" 2>/dev/null | head -1)" ]]; then
+    log_info "Building backend JAR (Gradle via Docker) ..."
+    docker run --rm --network=host \
+      -v "$ROOT_DIR":/build -w /build \
+      eclipse-temurin:21-jdk-alpine \
+      sh -c "chmod +x gradlew && ./gradlew --no-daemon buildFatJar"
+    log_ok "Backend JAR built."
+  else
+    log_ok "Backend JAR is up to date."
+  fi
+
   # Start
   log_info "Starting full stack ..."
   dc up --build -d

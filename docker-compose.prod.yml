@@ -61,9 +61,6 @@ services:
       start_period: 300s
 
   app:
-    build:
-      context: .
-      network: host
     environment:
       ENVIRONMENT: production
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (min 32 chars)}
