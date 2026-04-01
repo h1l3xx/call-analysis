@@ -64,8 +64,7 @@ services:
     environment:
       ENVIRONMENT: production
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (min 32 chars)}
-    ports:
-      - "127.0.0.1:8080:8080"
+    ports: []
     deploy:
       resources:
         limits:

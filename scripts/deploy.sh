@@ -537,11 +537,37 @@ deploy_all() {
   log_info "Starting full stack ..."
   dc up --build -d
 
-  # Wait for health
+  # Wait for health — services are not exposed on host ports in prod,
+  # so we check via docker compose health status instead.
   echo ""
-  wait_healthy "Pipeline" "http://localhost:8001/healthz" 360
-  wait_healthy "Backend"  "http://localhost:8080/health" 120
-  wait_healthy "Frontend (via Caddy)" "http://localhost:80/" 60
+  log_info "Waiting for containers to become healthy..."
+  local max_wait=360
+  local elapsed=0
+  while [[ $elapsed -lt $max_wait ]]; do
+    local unhealthy
+    unhealthy=$(dc ps --format '{{.Name}} {{.Health}}' 2>/dev/null | grep -v healthy | grep -v "" || true)
+    local all_healthy=true
+    for svc in malikov_pipeline malikov_app malikov_frontend; do
+      local health
+      health=$(docker inspect --format='{{.State.Health.Status}}' "$svc" 2>/dev/null || echo "missing")
+      if [[ "$health" != "healthy" ]]; then
+        all_healthy=false
+        break
+      fi
+    done
+    if [[ "$all_healthy" == "true" ]]; then
+      break
+    fi
+    sleep 5
+    elapsed=$((elapsed + 5))
+    printf "\r  [%3ds / %ds] Waiting for services..." "$elapsed" "$max_wait"
+  done
+  echo ""
+  if [[ $elapsed -ge $max_wait ]]; then
+    log_warn "Some services may not be healthy yet. Check: docker compose ps"
+  else
+    log_ok "All core services healthy."
+  fi
 
   echo ""
   log_ok "=== Deploy complete ==="
