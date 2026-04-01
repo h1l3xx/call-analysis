@@ -290,6 +290,7 @@ class CallService(
                 strengths       = it.strengths,
                 weaknesses      = it.weaknesses,
                 recommendations = it.recommendations,
+                summary         = it.summary,
             )
         },
         errors         = errors.map {

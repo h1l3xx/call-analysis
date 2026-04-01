@@ -141,6 +141,7 @@ class TQualityScores(schema: String) : Table("$schema.quality_scores") {
     val strengths       = jsonb("strengths").nullable()
     val weaknesses      = jsonb("weaknesses").nullable()
     val recommendations = jsonb("recommendations").nullable()
+    val summary         = text("summary").nullable()
     val processedAt     = long("processed_at")
 
     override val primaryKey = PrimaryKey(callId)

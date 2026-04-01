@@ -96,6 +96,7 @@ data class QualityScoreResponse(
     val strengths: String?,
     val weaknesses: String?,
     val recommendations: String?,
+    val summary: String?,
 )
 
 @Serializable

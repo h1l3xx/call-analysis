@@ -113,6 +113,11 @@ const tabs = [
           </div>
         </div>
 
+        <div v-if="result?.qualityScore?.summary" class="mt-4 bg-gray-50 rounded-lg px-4 py-3">
+          <p class="text-xs text-gray-500 mb-1">Описание</p>
+          <p class="text-sm text-gray-700">{{ result.qualityScore.summary }}</p>
+        </div>
+
         <div v-if="call.status !== 'queued'" class="mt-4">
           <AudioPlayer :call-id="(route.params.id as string)" />
         </div>

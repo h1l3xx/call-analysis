@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { QualityScoreResponse, ErrorEventResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
-import { Award, ThumbsUp, ThumbsDown, Lightbulb } from 'lucide-vue-next'
+import { Award, ThumbsUp, ThumbsDown, Lightbulb, FileText } from 'lucide-vue-next'
 
 const props = defineProps<{
   quality: QualityScoreResponse | null
@@ -51,6 +51,15 @@ function tryParseJson(val: string | null): string[] {
         <p class="text-xl font-semibold text-gray-900">{{ formatScore(quality.optionalScore) }}</p>
         <p class="text-xs text-gray-500">Опциональные</p>
       </div>
+    </div>
+
+    <!-- Call summary -->
+    <div v-if="quality.summary" class="bg-gray-50 rounded-xl p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <FileText class="w-4 h-4 text-gray-600" />
+        <h4 class="text-sm font-medium text-gray-700">Описание звонка</h4>
+      </div>
+      <p class="text-sm text-gray-600 leading-relaxed">{{ quality.summary }}</p>
     </div>
 
     <!-- Strengths / Weaknesses / Recommendations -->

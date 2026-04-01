@@ -114,26 +114,28 @@ class InternalCallEvaluator(
 $transcription
 ---
 
-Оцени по следующим аспектам:
-1. **Бизнес-процессы**: выяви узкие места, неэффективности, задержки, нарушения процедур.
-2. **Качество коммуникации**: ясность изложения, конструктивность, наличие action items, профессионализм.
+Оцени разговор по 5 критериям эффективного внутреннего общения:
+
+1. **Ясность и структурированность** (0–100): чёткость формулировок, логика изложения, отсутствие двусмысленности.
+2. **Результативность** (0–100): наличие конкретных решений, action items, ответственных и дедлайнов.
+3. **Профессионализм** (0–100): деловой тон, отсутствие конфликтности и эмоциональных срывов, уважительное общение.
+4. **Эффективность времени** (0–100): отношение полезного содержания к общей длительности, отсутствие уходов от темы.
+5. **Соблюдение процедур** (0–100): следование регламентам, корректная эскалация при необходимости, фиксация договорённостей.
+
+Также напиши краткое описание звонка (2–3 предложения): кто звонил, по какому поводу, чем закончился.
 
 Ответ СТРОГО в JSON формате:
 {
+  "summary": "<краткое описание: кто звонил, тема, итог — 2-3 предложения>",
   "overall_score": <число от 0 до 100>,
-  "business_processes": {
-    "score": <число от 0 to 100>,
-    "bottlenecks": ["описание узкого места 1", ...],
-    "inefficiencies": ["описание неэффективности 1", ...],
-    "procedure_violations": ["описание нарушения 1", ...]
+  "criteria_scores": {
+    "clarity": {"score": <0–100>, "comment": "<пояснение>"},
+    "effectiveness": {"score": <0–100>, "comment": "<пояснение>"},
+    "professionalism": {"score": <0–100>, "comment": "<пояснение>"},
+    "time_efficiency": {"score": <0–100>, "comment": "<пояснение>"},
+    "procedures": {"score": <0–100>, "comment": "<пояснение>"}
   },
-  "communication_quality": {
-    "score": <число от 0 до 100>,
-    "clarity": <число от 0 до 100>,
-    "constructiveness": <число от 0 до 100>,
-    "action_items_present": <true/false>,
-    "issues": ["проблема коммуникации 1", ...]
-  },
+  "action_items": ["конкретный action item 1", ...],
   "strengths": ["сильная сторона 1", ...],
   "weaknesses": ["слабая сторона 1", ...],
   "recommendations": ["рекомендация 1", ...]
@@ -157,8 +159,11 @@ $transcription
 Критерии оценки:
 $criteriaList
 
-Оцени каждый критерий. Ответ СТРОГО в JSON формате:
+Оцени каждый критерий. Также напиши краткое описание звонка (2–3 предложения): кто обратился, с какой целью, чем закончился разговор.
+
+Ответ СТРОГО в JSON формате:
 {
+  "summary": "<краткое описание: кто обратился, цель, итог — 2-3 предложения>",
   "overall_score": <число от 0 до 100>,
   "criteria_evaluations": [
     {
@@ -179,14 +184,15 @@ $criteriaList
     private fun saveInternalQuality(schema: String, callId: UUID, qualityJson: String) =
         transaction {
             val qs = TQualityScores(schema)
-            val parsed = try { json.parseToJsonElement(qualityJson) } catch (_: Exception) { null }
+            val parsed = try {
+                json.parseToJsonElement(qualityJson) as? kotlinx.serialization.json.JsonObject
+            } catch (_: Exception) { null }
 
-            val overallScore = parsed?.let {
-                try {
-                    val obj = it as kotlinx.serialization.json.JsonObject
-                    (obj["overall_score"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-                } catch (_: Exception) { null }
-            }
+            val overallScore = parsed?.get("overall_score")
+                ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() }
+
+            val summary = parsed?.get("summary")
+                ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
 
             qs.insert {
                 it[qs.callId] = callId
@@ -195,6 +201,7 @@ $criteriaList
                 it[qs.strengths] = extractJsonArray(qualityJson, "strengths")
                 it[qs.weaknesses] = extractJsonArray(qualityJson, "weaknesses")
                 it[qs.recommendations] = extractJsonArray(qualityJson, "recommendations")
+                it[qs.summary] = summary
                 it[qs.processedAt] = System.currentTimeMillis()
             }
         }

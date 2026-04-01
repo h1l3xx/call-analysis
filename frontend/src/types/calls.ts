@@ -77,6 +77,7 @@ export interface QualityScoreResponse {
   strengths: string | null
   weaknesses: string | null
   recommendations: string | null
+  summary: string | null
 }
 
 export interface ErrorEventResponse {

@@ -104,19 +104,28 @@ class PipelineResultWriter {
         qualityJson: String,
     ) = transaction {
         val qs = TQualityScores(schema)
-        val parsed = try { json.parseToJsonElement(qualityJson) } catch (_: Exception) { null }
-        val overallScore = parsed?.let {
-            try {
-                val obj = it as kotlinx.serialization.json.JsonObject
-                (obj["overall_score"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-            } catch (_: Exception) { null }
-        }
+        val parsed = try {
+            json.parseToJsonElement(qualityJson) as? kotlinx.serialization.json.JsonObject
+        } catch (_: Exception) { null }
+
+        val overallScore = parsed?.get("overall_score")
+            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() }
+
+        val summary = parsed?.get("summary")
+            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+
+        fun extractArray(key: String): String? =
+            parsed?.get(key)?.let { json.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), it) }
 
         qs.insert {
             it[qs.callId] = callId
             it[qs.scriptId] = scriptId
             it[qs.overallScore] = overallScore
             it[qs.criteria] = qualityJson
+            it[qs.strengths] = extractArray("strengths")
+            it[qs.weaknesses] = extractArray("weaknesses")
+            it[qs.recommendations] = extractArray("recommendations")
+            it[qs.summary] = summary
             it[qs.processedAt] = System.currentTimeMillis()
         }
 

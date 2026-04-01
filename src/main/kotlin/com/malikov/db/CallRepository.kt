@@ -51,6 +51,7 @@ data class QualityScoreRow(
     val strengths: String?,
     val weaknesses: String?,
     val recommendations: String?,
+    val summary: String?,
 )
 
 data class ErrorEventRow(
@@ -218,6 +219,7 @@ class CallRepository {
                 strengths       = row[qs.strengths],
                 weaknesses      = row[qs.weaknesses],
                 recommendations = row[qs.recommendations],
+                summary         = row[qs.summary],
             )
         }
 

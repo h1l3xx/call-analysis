@@ -119,6 +119,7 @@ class BatchSummaryService(
                     overallScore = row.getOrNull(qs.overallScore),
                     strengths = row.getOrNull(qs.strengths),
                     weaknesses = row.getOrNull(qs.weaknesses),
+                    summary = row.getOrNull(qs.summary),
                 )
             }
     }
@@ -161,6 +162,7 @@ class BatchSummaryService(
                     overallScore = row.getOrNull(qs.overallScore),
                     strengths = row.getOrNull(qs.strengths),
                     weaknesses = row.getOrNull(qs.weaknesses),
+                    summary = row.getOrNull(qs.summary),
                 )
             }
     }
@@ -180,7 +182,9 @@ class BatchSummaryService(
             """
 Звонок: ${call.filename ?: call.callId}
 Менеджер: ${call.managerName ?: "Неизвестен"}
+Описание: ${call.summary ?: "N/A"}
 Оценка: ${call.overallScore ?: "N/A"}
+Сильные стороны: ${call.strengths ?: "N/A"}
 Слабые стороны: ${call.weaknesses ?: "N/A"}
 """.trimIndent()
         }
@@ -213,6 +217,7 @@ $callSummaries
             """
 Звонок: ${call.filename ?: call.callId}
 Менеджер: ${call.managerName ?: "Неизвестен"}
+Описание: ${call.summary ?: "N/A"}
 Оценка: ${call.overallScore ?: "N/A"}
 Сильные стороны: ${call.strengths ?: "N/A"}
 Слабые стороны: ${call.weaknesses ?: "N/A"}
@@ -248,7 +253,8 @@ $callSummaries
         val externalCount = calls.size - internalCount
 
         val callSummaries = calls.take(50).joinToString("\n") { call ->
-            "${call.callType}: ${call.managerName ?: "?"} — score ${call.overallScore ?: "N/A"}"
+            val desc = call.summary?.let { " — $it" } ?: ""
+            "${call.callType}: ${call.managerName ?: "?"} — score ${call.overallScore ?: "N/A"}$desc"
         }
 
         return """
@@ -310,6 +316,7 @@ $callSummaries
         val overallScore: Double?,
         val strengths: String?,
         val weaknesses: String?,
+        val summary: String?,
     )
 
     @Serializable
