@@ -1,39 +1,32 @@
 package com.malikov.pipeline
 
+import com.malikov.db.TCalls
+import com.malikov.db.TTranscriptions
+import com.malikov.service.InternalCallEvaluator
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
 
 /**
- * Оркестратор обработки звонков через AI pipeline.
- *
- * Жизненный цикл звонка:
- *   queued → processing → (transcribed_only | done | failed)
- *
- * Обработка запускается в фоновой корутине — HTTP-запрос клиента
- * получает ответ сразу после создания записи, не дожидаясь pipeline.
- * Семафор ограничивает параллелизм, чтобы не перегружать pipeline.
+ * Two-phase call processing orchestrator:
+ *   Phase A — transcription + diarization via Python pipeline
+ *   Phase B — LLM quality evaluation via backend (OpenRouter)
  */
 class PipelineService(
     private val client: PipelineClient,
     private val resultWriter: PipelineResultWriter,
+    private val evaluator: InternalCallEvaluator,
     maxConcurrency: Int = 3,
 ) {
     private val log = LoggerFactory.getLogger(PipelineService::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val semaphore = Semaphore(maxConcurrency)
 
-    /**
-     * Запускает асинхронную обработку звонка через AI pipeline.
-     *
-     * @param schema    tenant-схема БД
-     * @param callId    ID звонка в tenant-таблице calls
-     * @param scriptId  ID скрипта оценки (для записи в quality_scores)
-     * @param audioFile локальный аудиофайл (временный)
-     * @param criteria  критерии скрипта для передачи в pipeline
-     */
     fun submitAsync(
         schema: String,
         callId: UUID,
@@ -51,9 +44,6 @@ class PipelineService(
         }
     }
 
-    /**
-     * Синхронная обработка (для тестов / ручного вызова).
-     */
     suspend fun processCall(
         schema: String,
         callId: UUID,
@@ -67,15 +57,30 @@ class PipelineService(
         try {
             resultWriter.markProcessing(schema, callId)
 
-            val response = client.analyze(audioFile, criteria)
-            log.info("Pipeline returned result_id={} for call {}", response.resultId, callId)
+            // Phase A: transcription + diarization
+            val response = client.analyze(audioFile, criteria = null)
+            log.info("Phase A complete: result_id={} for call {}", response.resultId, callId)
 
-            resultWriter.saveResult(schema, callId, scriptId, response)
+            resultWriter.saveTranscriptionOnly(schema, callId, response)
 
-            log.info("Call {} processed successfully, status={}",
-                callId,
-                if (response.quality != null) "done" else "transcribed_only"
-            )
+            // Phase B: LLM quality evaluation
+            val transcription = getTranscription(schema, callId)
+            if (!transcription.isNullOrBlank()) {
+                log.info("Phase B: LLM evaluation for call {} [script={}]", callId, scriptId)
+                markStatus(schema, callId, "analyzing")
+
+                if (criteria != null && criteria.isNotEmpty()) {
+                    val qualityJson = evaluator.evaluateWithCriteria(transcription, criteria, "script")
+                    resultWriter.saveQualityFromJson(schema, callId, scriptId, qualityJson)
+                } else {
+                    evaluator.evaluate(schema, callId, transcription)
+                }
+
+                markDone(schema, callId)
+                log.info("Call {} fully processed (transcription + evaluation)", callId)
+            } else {
+                log.warn("No transcription for call {}, skipping Phase B", callId)
+            }
 
         } catch (e: PipelineException) {
             log.error("Pipeline error for call {}: [{}] {}", callId, e.statusCode, e.detail)
@@ -104,6 +109,25 @@ class PipelineService(
             } catch (e: Exception) {
                 log.warn("Failed to delete temp file {}: {}", audioFile.absolutePath, e.message)
             }
+        }
+    }
+
+    private fun getTranscription(schema: String, callId: UUID): String? = transaction {
+        val t = TTranscriptions(schema)
+        t.selectAll().where { t.callId eq callId }.singleOrNull()
+            ?.let { it[t.cleanedText] ?: it[t.rawText] }
+    }
+
+    private fun markStatus(schema: String, callId: UUID, status: String) = transaction {
+        val cl = TCalls(schema)
+        cl.update({ cl.id eq callId }) { it[cl.status] = status }
+    }
+
+    private fun markDone(schema: String, callId: UUID) = transaction {
+        val cl = TCalls(schema)
+        cl.update({ cl.id eq callId }) {
+            it[cl.status] = "done"
+            it[cl.finishedAt] = System.currentTimeMillis()
         }
     }
 

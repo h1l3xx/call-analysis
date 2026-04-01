@@ -37,10 +37,11 @@ class ServiceRegistry(config: AppConfig) {
     // Pipeline (AI module integration)
     val pipelineClient       = PipelineClient(config.pipeline, config.pipeline.apiKey)
     val pipelineResultWriter = PipelineResultWriter()
-    val pipelineService      = PipelineService(pipelineClient, pipelineResultWriter)
 
     // LLM evaluation services
     val internalCallEvaluator = InternalCallEvaluator(config.pipeline)
+
+    val pipelineService      = PipelineService(pipelineClient, pipelineResultWriter, internalCallEvaluator)
     val batchSummaryService   = BatchSummaryService(batchRepository)
 
     // Batch processing orchestrator
