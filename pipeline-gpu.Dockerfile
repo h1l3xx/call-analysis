@@ -52,7 +52,7 @@ COPY --chown=asruser:asruser main.py ./
 COPY --chown=asruser:asruser pyproject.toml ./
 COPY --chown=asruser:asruser uv.toml ./
 COPY --chown=asruser:asruser templates/ ./templates/
-COPY --chown=asruser:asruser config.yaml ./
+COPY --chown=asruser:asruser config.example.yaml ./config.yaml
 COPY --chown=asruser:asruser branches.yaml* ./
 
 RUN mkdir -p logs input output metadata archive analytics quality_analysis quarantine
