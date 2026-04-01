@@ -1,0 +1,45 @@
+# ── Build artifacts ───────────────────────────────────────────────
+build/
+.gradle/
+*.class
+*.jar
+!gradle-wrapper.jar
+
+# ── IDE ──────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.cursor/
+
+# ── Environment & secrets ────────────────────────────────────────
+.env
+.env.local
+.env.production
+!.env.example
+!.env.production.example
+
+# ── OS ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# ── Docker volumes / data ────────────────────────────────────────
+postgres_data/
+redis_data/
+audio_data/
+
+# ── Backups ──────────────────────────────────────────────────────
+backups/
+
+# ── Pipeline (cloned at deploy time) ────────────────────────────
+# pipeline/ directory is a separate git repo cloned by deploy.sh
+# Only config.prod.yaml and patches are tracked in this repo
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Cache ────────────────────────────────────────────────────────
+.cache/
+node_modules/

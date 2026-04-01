@@ -1,0 +1,45 @@
+services:
+  vllm:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:latest}
+    container_name: malikov_vllm
+    restart: unless-stopped
+    gpus:
+      - driver: nvidia
+        count: all
+        capabilities: [gpu]
+    shm_size: ${VLLM_SHM_SIZE:-16gb}
+    ipc: host
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    command: >
+      --model ${VLLM_MODEL}
+      --host 0.0.0.0
+      --port 8000
+      --dtype ${VLLM_DTYPE:-auto}
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.9}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-8192}
+      --max-num-seqs ${VLLM_MAX_NUM_SEQS:-8}
+      --tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE:-1}
+      --enforce-eager
+      ${VLLM_EXTRA_ARGS:-}
+    ports:
+      - "${VLLM_PORT:-8000}:8000"
+    volumes:
+      - ${VLLM_CACHE_DIR:-./.cache/huggingface}:/root/.cache/huggingface
+
+  pipeline:
+    depends_on:
+      vllm:
+        condition: service_started
+    environment:
+      VLLM__ENABLED: ${PIPELINE_VLLM_ENABLED:-true}
+      VLLM__BASE_URL: ${PIPELINE_VLLM_BASE_URL:-http://vllm:8000/v1}
+      VLLM__MODEL: ${VLLM_MODEL}
+      VLLM__TIMEOUT: ${PIPELINE_VLLM_TIMEOUT:-300}
+      VLLM__RETRY_ATTEMPTS: ${PIPELINE_VLLM_RETRY_ATTEMPTS:-3}
+      VLLM__RETRY_DELAY: ${PIPELINE_VLLM_RETRY_DELAY:-2.0}
+      QUALITY_ANALYSIS__ENABLED: ${PIPELINE_QUALITY_ENABLED:-true}
+      QUALITY_ANALYSIS__PROVIDER: vllm
+      QUALITY_ANALYSIS__BASE_URL: ${PIPELINE_VLLM_BASE_URL:-http://vllm:8000/v1}
+      QUALITY_ANALYSIS__MODEL: ${VLLM_MODEL}
+      QUALITY_ANALYSIS__TIMEOUT: ${PIPELINE_QUALITY_TIMEOUT:-300}

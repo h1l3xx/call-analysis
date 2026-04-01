@@ -1,0 +1,282 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute, RouterLink } from 'vue-router'
+import { ArrowLeft, RefreshCw, Phone, Building } from 'lucide-vue-next'
+import { batchesApi } from '@/api'
+import type { BatchResponse, BatchSummaryResponse, CallResponse } from '@/types'
+import { useFormatters } from '@/composables/useFormatters'
+import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
+
+const route = useRoute()
+const { formatDate, formatDuration } = useFormatters()
+
+const batch = ref<BatchResponse | null>(null)
+const summaries = ref<BatchSummaryResponse[]>([])
+const calls = ref<CallResponse[]>([])
+const loading = ref(true)
+const callsLoading = ref(false)
+const summarizing = ref(false)
+const tab = ref<'all' | 'internal' | 'external'>('all')
+const callsPage = ref(1)
+const callsTotalPages = ref(1)
+let pollInterval: ReturnType<typeof setInterval> | null = null
+
+const batchId = computed(() => route.params.id as string)
+
+async function fetchBatch() {
+  try {
+    const { data } = await batchesApi.get(batchId.value)
+    batch.value = data.batch
+    summaries.value = data.summaries
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchCalls() {
+  callsLoading.value = true
+  try {
+    const callType = tab.value === 'all' ? undefined : tab.value
+    const { data } = await batchesApi.getCalls(batchId.value, {
+      page: callsPage.value, pageSize: 20, callType,
+    })
+    calls.value = data.items
+    callsTotalPages.value = data.totalPages
+  } finally {
+    callsLoading.value = false
+  }
+}
+
+async function regenerateSummary() {
+  summarizing.value = true
+  try {
+    await batchesApi.regenerateSummary(batchId.value)
+    await fetchBatch()
+  } finally {
+    summarizing.value = false
+  }
+}
+
+function startPolling() {
+  pollInterval = setInterval(async () => {
+    if (batch.value && !['done', 'failed'].includes(batch.value.status)) {
+      await fetchBatch()
+      await fetchCalls()
+    } else if (pollInterval) {
+      clearInterval(pollInterval)
+      pollInterval = null
+    }
+  }, 5000)
+}
+
+onMounted(async () => {
+  await fetchBatch()
+  await fetchCalls()
+  startPolling()
+})
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+})
+
+function statusLabel(s: string): string {
+  const map: Record<string, string> = {
+    uploading: 'Загрузка файлов',
+    transcribing: 'Транскрипция звонков',
+    evaluating: 'Оценка LLM',
+    summarizing: 'Генерация отчёта',
+    done: 'Обработка завершена',
+    failed: 'Ошибка обработки',
+  }
+  return map[s] || s
+}
+
+function statusClass(s: string): string {
+  const map: Record<string, string> = {
+    uploading: 'bg-blue-100 text-blue-700',
+    transcribing: 'bg-cyan-100 text-cyan-700',
+    evaluating: 'bg-amber-100 text-amber-700',
+    summarizing: 'bg-purple-100 text-purple-700',
+    done: 'bg-green-100 text-green-700',
+    failed: 'bg-red-100 text-red-700',
+  }
+  return map[s] || 'bg-gray-100 text-gray-700'
+}
+
+function progressPercent(): number {
+  if (!batch.value?.totalCalls) return 0
+  return Math.round((batch.value.processedCalls / batch.value.totalCalls) * 100)
+}
+
+function callTypeLabel(ct: string | null): string {
+  if (ct === 'internal') return 'Внутренний'
+  if (ct === 'external') return 'Внешний'
+  return 'Неизвестный'
+}
+
+function callTypeBadgeClass(ct: string | null): string {
+  if (ct === 'internal') return 'bg-blue-100 text-blue-700'
+  if (ct === 'external') return 'bg-purple-100 text-purple-700'
+  return 'bg-gray-100 text-gray-600'
+}
+
+function parseSummaryContent(content: string | null): Record<string, any> | null {
+  if (!content) return null
+  try { return JSON.parse(content) } catch { return null }
+}
+</script>
+
+<template>
+  <div class="space-y-5">
+    <div class="flex items-center gap-3">
+      <RouterLink to="/batches" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+        <ArrowLeft class="w-5 h-5" />
+      </RouterLink>
+      <h1 class="text-2xl font-bold text-gray-900">Батч загрузки</h1>
+    </div>
+
+    <div v-if="loading" class="p-12 text-center text-gray-400">Загрузка...</div>
+
+    <template v-else-if="batch">
+      <!-- Status card -->
+      <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="text-sm font-medium px-3 py-1 rounded" :class="statusClass(batch.status)">
+              {{ statusLabel(batch.status) }}
+            </span>
+            <span class="text-sm text-gray-500">{{ formatDate(batch.createdAt) }}</span>
+          </div>
+          <div class="flex items-center gap-3 text-sm text-gray-600">
+            <span>{{ batch.processedCalls }}/{{ batch.totalCalls }} звонков</span>
+          </div>
+        </div>
+
+        <div v-if="batch.status !== 'done' && batch.status !== 'failed'" class="space-y-1">
+          <div class="w-full bg-gray-200 rounded-full h-2">
+            <div
+              class="h-2 rounded-full transition-all bg-primary-500"
+              :style="{ width: `${progressPercent()}%` }"
+            />
+          </div>
+          <p class="text-xs text-gray-500 text-center">{{ progressPercent() }}%</p>
+        </div>
+
+        <div v-if="batch.callTypeStats" class="flex gap-4 text-sm">
+          <div v-if="batch.callTypeStats.internal" class="flex items-center gap-1.5">
+            <Building class="w-4 h-4 text-blue-500" />
+            <span class="text-gray-700">Внутренние: {{ batch.callTypeStats.internal }}</span>
+          </div>
+          <div v-if="batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing" class="flex items-center gap-1.5">
+            <Phone class="w-4 h-4 text-purple-500" />
+            <span class="text-gray-700">Внешние: {{ batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summaries -->
+      <div v-if="summaries.length" class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-gray-900">Отчёты</h2>
+          <button
+            v-if="batch.status === 'done'"
+            :disabled="summarizing"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50"
+            @click="regenerateSummary"
+          >
+            <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': summarizing }" />
+            Пересоздать
+          </button>
+        </div>
+
+        <div v-for="s in summaries" :key="s.id" class="bg-white rounded-xl border border-gray-200 p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span
+              class="text-xs font-medium px-2 py-0.5 rounded"
+              :class="s.scope === 'internal' ? 'bg-blue-100 text-blue-700' : s.scope === 'external' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'"
+            >
+              {{ s.scope === 'internal' ? 'Внутренние' : s.scope === 'external' ? 'Внешние' : 'Все' }}
+            </span>
+            <span class="text-xs text-gray-400">{{ formatDate(s.createdAt) }}</span>
+          </div>
+
+          <template v-if="parseSummaryContent(s.content)">
+            <div class="space-y-3 text-sm">
+              <p v-if="parseSummaryContent(s.content)!.summary_text" class="text-gray-700 leading-relaxed">
+                {{ parseSummaryContent(s.content)!.summary_text }}
+              </p>
+              <div v-if="parseSummaryContent(s.content)!.top_recommendations?.length" class="mt-2">
+                <p class="font-medium text-gray-800 mb-1">Рекомендации:</p>
+                <ul class="list-disc list-inside space-y-0.5 text-gray-600">
+                  <li v-for="(rec, i) in parseSummaryContent(s.content)!.top_recommendations" :key="i">{{ rec }}</li>
+                </ul>
+              </div>
+              <div v-if="parseSummaryContent(s.content)!.recommendations?.length" class="mt-2">
+                <p class="font-medium text-gray-800 mb-1">Рекомендации:</p>
+                <ul class="list-disc list-inside space-y-0.5 text-gray-600">
+                  <li v-for="(rec, i) in parseSummaryContent(s.content)!.recommendations" :key="i">{{ rec }}</li>
+                </ul>
+              </div>
+            </div>
+          </template>
+          <pre v-else class="text-xs text-gray-500 whitespace-pre-wrap">{{ s.content }}</pre>
+        </div>
+      </div>
+
+      <!-- Calls tabs -->
+      <div class="space-y-3">
+        <div class="flex items-center gap-2">
+          <button
+            v-for="t in (['all', 'internal', 'external'] as const)"
+            :key="t"
+            class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
+            :class="tab === t ? 'bg-primary-100 text-primary-700' : 'text-gray-600 hover:bg-gray-100'"
+            @click="tab = t; callsPage = 1; fetchCalls()"
+          >
+            {{ t === 'all' ? 'Все звонки' : t === 'internal' ? 'Внутренние' : 'Внешние' }}
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div v-if="callsLoading" class="p-8 text-center text-gray-400">Загрузка...</div>
+          <table v-else class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium text-gray-600">Менеджер</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-600">Тип</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-600">Статус</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-600">Длительность</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-600">Дата</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-if="!calls.length">
+                <td colspan="5" class="px-5 py-8 text-center text-gray-400">Нет звонков</td>
+              </tr>
+              <RouterLink
+                v-for="call in calls"
+                :key="call.id"
+                :to="`/calls/${call.id}`"
+                custom
+                v-slot="{ navigate }"
+              >
+                <tr class="hover:bg-gray-50 cursor-pointer transition-colors" @click="navigate">
+                  <td class="px-5 py-3 font-medium text-gray-900">{{ call.managerName || '—' }}</td>
+                  <td class="px-5 py-3">
+                    <span
+                      class="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                      :class="callTypeBadgeClass(call.callType)"
+                    >{{ callTypeLabel(call.callType) }}</span>
+                  </td>
+                  <td class="px-5 py-3"><CallStatusBadge :status="call.status" /></td>
+                  <td class="px-5 py-3 text-gray-600">{{ formatDuration(call.durationSeconds) }}</td>
+                  <td class="px-5 py-3 text-gray-500">{{ formatDate(call.createdAt) }}</td>
+                </tr>
+              </RouterLink>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>

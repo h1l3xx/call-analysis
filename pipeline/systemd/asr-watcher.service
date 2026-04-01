@@ -1,0 +1,35 @@
+[Unit]
+Description=Call Analytics — ASR watcher (transcription pipeline)
+Documentation=https://github.com/FUYOH666/Scanovich.ai-audio-call
+After=network.target vllm.service
+Requires=vllm.service
+
+[Service]
+Type=simple
+User=ai
+Group=ai
+WorkingDirectory=/path/to/project/call-analytics
+Environment="PATH=/home/USER/.cargo/bin:/home/USER/.local/bin:/usr/local/bin:/usr/bin"
+Environment="PYTHONUNBUFFERED=1"
+
+ExecStart=/usr/bin/uv run python main.py run
+
+# Автоматический рестарт при падении
+Restart=always
+RestartSec=10
+
+# Graceful shutdown (даём 30 секунд на завершение обработки)
+TimeoutStopSec=30
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=asr-watcher
+
+# Ограничения ресурсов (опционально)
+# CPUQuota=400%  # Максимум 4 ядра
+# MemoryLimit=16G
+
+[Install]
+WantedBy=multi-user.target
+

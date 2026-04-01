@@ -1,0 +1,379 @@
+diff --git a/src/pipeline_service.py b/src/pipeline_service.py
+index a742288..96e5a0e 100644
+--- a/src/pipeline_service.py
++++ b/src/pipeline_service.py
+@@ -86,6 +86,7 @@ class CallAnalysisPipeline:
+         display_name: str | None = None,
+         persist: bool = False,
+         analyze_quality: bool | None = None,
++        custom_criteria: list[dict] | None = None,
+     ) -> AnalysisResult:
+         """
+         Run the analysis pipeline for a single audio file.
+@@ -95,6 +96,8 @@ class CallAnalysisPipeline:
+             display_name: Original filename for logs and saved metadata.
+             persist: Save transcript/metadata artifacts to configured paths.
+             analyze_quality: Override quality-analysis execution.
++            custom_criteria: Optional list of criteria dicts from the backend.
++                             When provided, these override the file-based script templates.
+         """
+         file_path_obj = Path(file_path)
+         source_name = display_name or file_path_obj.name
+@@ -148,6 +151,7 @@ class CallAnalysisPipeline:
+                     metrics=asr_metrics,
+                     output_path=output_path,
+                     metadata_path=metadata_path,
++                    custom_criteria=custom_criteria,
+                 )
+ 
+             logger.info("Shared pipeline complete: %s", source_name)
+@@ -221,6 +225,7 @@ class CallAnalysisPipeline:
+         metrics: dict,
+         output_path: Path | None,
+         metadata_path: Path | None,
++        custom_criteria: list[dict] | None = None,
+     ) -> tuple[dict, str]:
+         if output_path is None:
+             output_path, metadata_path = self._write_temporary_artifacts(
+@@ -237,6 +242,7 @@ class CallAnalysisPipeline:
+             quality_result = self.quality_analyzer.analyze_call(
+                 str(output_path),
+                 str(metadata_path) if metadata_path and metadata_path.exists() else None,
++                custom_criteria=custom_criteria,
+             )
+             quality_path = self.quality_analyzer.save_analysis(
+                 quality_result, Path(source_name).stem
+diff --git a/src/quality_analyzer.py b/src/quality_analyzer.py
+index 8244365..5112828 100644
+--- a/src/quality_analyzer.py
++++ b/src/quality_analyzer.py
+@@ -180,11 +180,12 @@ class OpenRouterAnalyzer:
+ 
+         Args:
+             script_criteria: Список критериев из скрипта
+-            equipment_type: Тип оборудования (1.5T или 3T)
++            equipment_type: Тип оборудования / "custom"
+ 
+         Returns:
+             str: System prompt
+         """
++        count = len(script_criteria)
+         criteria_text = "\n\n".join(
+             [
+                 f"{c['id']}. **{c['name']}** — {c['description']}"
+@@ -200,9 +201,9 @@ class OpenRouterAnalyzer:
+ - Есть утверждённые корпоративные скрипты обслуживания
+ 
+ ЗАДАЧА:
+-Объективно оценить качество работы оператора по 30 критериям из скрипта {equipment_type}.
++Объективно оценить качество работы оператора по {count} критериям из скрипта оценки.
+ 
+-КРИТЕРИИ ОЦЕНКИ (скрипт {equipment_type}):
++КРИТЕРИИ ОЦЕНКИ:
+ 
+ {criteria_text}
+ 
+@@ -244,7 +245,7 @@ class OpenRouterAnalyzer:
+         return system_prompt
+ 
+     def build_user_prompt(
+-        self, transcription: str, metadata: Optional[Dict] = None
++        self, transcription: str, metadata: Optional[Dict] = None, num_criteria: int = 30,
+     ) -> str:
+         """
+         Построить user prompt для Cloud LLM.
+@@ -252,6 +253,7 @@ class OpenRouterAnalyzer:
+         Args:
+             transcription: Текст транскрипции
+             metadata: Метаданные звонка
++            num_criteria: Количество критериев
+ 
+         Returns:
+             str: User prompt
+@@ -274,7 +276,7 @@ class OpenRouterAnalyzer:
+ 
+ ---
+ 
+-Проанализируй этот звонок по всем 30 критериям скрипта.
++Проанализируй этот звонок по всем {num_criteria} критериям скрипта.
+ Верни детальную оценку в JSON формате согласно инструкции."""
+ 
+         return user_prompt
+@@ -305,6 +307,7 @@ class OpenRouterAnalyzer:
+                 ],
+                 temperature=self.config.temperature,
+                 max_tokens=self.config.max_tokens,
++                response_format={"type": "json_object"},
+             )
+ 
+             result_text = response.choices[0].message.content.strip()
+@@ -351,9 +354,8 @@ class OpenRouterAnalyzer:
+         Returns:
+             Dict: Результат анализа
+         """
+-        # Построение промптов
+         system_prompt = self.build_system_prompt(script_criteria, equipment_type)
+-        user_prompt = self.build_user_prompt(transcription, metadata)
++        user_prompt = self.build_user_prompt(transcription, metadata, len(script_criteria))
+ 
+         # Вызов Cloud LLM
+         response_text, api_stats = self._call_claude(system_prompt, user_prompt)
+@@ -393,18 +395,30 @@ class OpenRouterAnalyzer:
+             # Парсинг JSON
+             result = json.loads(json_str)
+ 
+-            # Валидация структуры
+-            required_fields = [
+-                "criteria_evaluations",
+-                "overall_score",
+-                "strengths",
+-                "weaknesses",
+-                "recommendations",
+-            ]
+-            for field in required_fields:
++            # Строгая валидация структуры
++            required_fields = {
++                "criteria_evaluations": list,
++                "overall_score": (int, float),
++                "strengths": list,
++                "weaknesses": list,
++                "recommendations": list,
++            }
++            for field, expected_type in required_fields.items():
+                 if field not in result:
+                     logger.error(f"Cloud LLM ответ не содержит поле: {field}")
+                     return None
++                if not isinstance(result[field], expected_type):
++                    logger.error("Cloud LLM поле %s имеет неверный тип: %s", field, type(result[field]))
++                    return None
++
++            for idx, criterion in enumerate(result["criteria_evaluations"]):
++                if not isinstance(criterion, dict):
++                    logger.error("Cloud LLM criteria_evaluations[%s] не объект", idx)
++                    return None
++                for key in ("id", "name", "score", "comment", "relevant"):
++                    if key not in criterion:
++                        logger.error("Cloud LLM criteria_evaluations[%s] не содержит ключ %s", idx, key)
++                        return None
+ 
+             return result
+ 
+@@ -466,7 +480,10 @@ class QualityAnalyzer:
+         logger.info("✓ QualityAnalyzer инициализирован")
+ 
+     def analyze_call(
+-        self, transcription_path: str, metadata_path: Optional[str] = None
++        self,
++        transcription_path: str,
++        metadata_path: Optional[str] = None,
++        custom_criteria: Optional[List[Dict]] = None,
+     ) -> Dict:
+         """
+         Анализ одного звонка.
+@@ -474,11 +491,13 @@ class QualityAnalyzer:
+         Args:
+             transcription_path: Путь к файлу транскрипции
+             metadata_path: Путь к файлу метаданных (опционально)
++            custom_criteria: Критерии, переданные из бэкенда (опционально).
++                             Если указаны — используются вместо файловых шаблонов.
++                             Каждый элемент: {id, name, description, block?}
+ 
+         Returns:
+             Dict: Результат анализа качества
+         """
+-        # Загрузка транскрипции
+         transcription_path_obj = Path(transcription_path)
+         if not transcription_path_obj.exists():
+             raise FileNotFoundError(f"Транскрипция не найдена: {transcription_path}")
+@@ -486,7 +505,6 @@ class QualityAnalyzer:
+         with open(transcription_path_obj, "r", encoding="utf-8") as f:
+             transcription = f.read()
+ 
+-        # Загрузка метаданных
+         metadata = None
+         if metadata_path:
+             metadata_path_obj = Path(metadata_path)
+@@ -496,24 +514,27 @@ class QualityAnalyzer:
+ 
+         logger.info(f"Анализ качества: {transcription_path_obj.name}")
+ 
+-        # 1. Определение типа оборудования
+         classification = metadata.get("classification") if metadata else None
+-        equipment_type = EquipmentDetector.detect(transcription, classification)
+ 
+-        # 2. Выбор соответствующего скрипта
+-        script_key = "script_3t" if equipment_type == "3T" else "script_1_5t"
+-        if script_key not in self.scripts:
+-            raise ValueError(f"Скрипт {script_key} не загружен!")
++        if custom_criteria:
++            script_criteria = custom_criteria
++            equipment_type = "custom"
++            logger.info(
++                f"Используются кастомные критерии из бэкенда: {len(script_criteria)} шт."
++            )
++        else:
++            equipment_type = EquipmentDetector.detect(transcription, classification)
++            script_key = "script_3t" if equipment_type == "3T" else "script_1_5t"
++            if script_key not in self.scripts:
++                raise ValueError(f"Скрипт {script_key} не загружен!")
++            script_criteria = self.scripts[script_key]
+ 
+-        script_criteria = self.scripts[script_key]
++        num_criteria = len(script_criteria)
+ 
+-        # 3. Анализ через выбранную модель (VLLM или Cloud LLM)
+         if self.config.provider == "vllm":
+-            # Построение промптов
+-            system_prompt = self._build_system_prompt(script_criteria, equipment_type)
+-            user_prompt = self._build_user_prompt(transcription, metadata)
+-            
+-            # Анализ через LLM
++            system_prompt = self._build_system_prompt(script_criteria, equipment_type, num_criteria)
++            user_prompt = self._build_user_prompt(transcription, metadata, num_criteria)
++
+             response_text, metrics = self.analyzer.analyze(system_prompt, user_prompt)
+             evaluation = self._parse_response(response_text)
+             if evaluation:
+@@ -521,12 +542,10 @@ class QualityAnalyzer:
+             else:
+                 raise ValueError("Не удалось распарсить ответ от LLM")
+         else:
+-            # Анализ через Cloud LLM
+             evaluation = self.analyzer.analyze(
+                 transcription, script_criteria, equipment_type, metadata
+             )
+ 
+-        # 4. Добавление метаинформации
+         result = {
+             "call_id": transcription_path_obj.stem,
+             "equipment_type": equipment_type,
+@@ -546,11 +565,9 @@ class QualityAnalyzer:
+ 
+         return result
+     
+-    def _build_system_prompt(self, script_criteria, equipment_type):
++    def _build_system_prompt(self, script_criteria, equipment_type, num_criteria=None):
+         """Построить system prompt (используется для VLLM)."""
+-        # Используем метод из OpenRouterAnalyzer
+-        from src.model_comparison import LLMAnalyzer
+-        
++        count = num_criteria or len(script_criteria)
+         criteria_text = "\n\n".join(
+             [
+                 f"{c['id']}. **{c['name']}** — {c['description']}"
+@@ -566,9 +583,9 @@ class QualityAnalyzer:
+ - Есть утверждённые корпоративные скрипты обслуживания
+ 
+ ЗАДАЧА:
+-Объективно оценить качество работы оператора по 30 критериям из скрипта {equipment_type}.
++Объективно оценить качество работы оператора по {count} критериям из скрипта оценки.
+ 
+-КРИТЕРИИ ОЦЕНКИ (скрипт {equipment_type}):
++КРИТЕРИИ ОЦЕНКИ:
+ 
+ {criteria_text}
+ 
+@@ -598,8 +615,9 @@ class QualityAnalyzer:
+   "reasoning": "Детальное объяснение..."
+ }}"""
+     
+-    def _build_user_prompt(self, transcription, metadata):
++    def _build_user_prompt(self, transcription, metadata, num_criteria=None):
+         """Построить user prompt (используется для VLLM)."""
++        count = num_criteria or 30
+         metadata_text = ""
+         if metadata and "classification" in metadata:
+             classification = metadata["classification"]
+@@ -618,7 +636,7 @@ class QualityAnalyzer:
+ 
+ ---
+ 
+-Проанализируй этот звонок по всем 30 критериям скрипта.
++Проанализируй этот звонок по всем {count} критериям скрипта.
+ Верни детальную оценку в JSON формате согласно инструкции."""
+     
+     def _parse_response(self, response_text):
+@@ -638,17 +656,29 @@ class QualityAnalyzer:
+ 
+             result = json.loads(json_str)
+ 
+-            required_fields = [
+-                "criteria_evaluations",
+-                "overall_score",
+-                "strengths",
+-                "weaknesses",
+-                "recommendations",
+-            ]
+-            for field in required_fields:
++            required_fields = {
++                "criteria_evaluations": list,
++                "overall_score": (int, float),
++                "strengths": list,
++                "weaknesses": list,
++                "recommendations": list,
++            }
++            for field, expected_type in required_fields.items():
+                 if field not in result:
+                     logger.error(f"Ответ не содержит поле: {field}")
+                     return None
++                if not isinstance(result[field], expected_type):
++                    logger.error("Поле %s имеет неверный тип: %s", field, type(result[field]))
++                    return None
++
++            for idx, criterion in enumerate(result["criteria_evaluations"]):
++                if not isinstance(criterion, dict):
++                    logger.error("criteria_evaluations[%s] не объект", idx)
++                    return None
++                for key in ("id", "name", "score", "comment", "relevant"):
++                    if key not in criterion:
++                        logger.error("criteria_evaluations[%s] не содержит ключ %s", idx, key)
++                        return None
+ 
+             return result
+ 
+diff --git a/src/web/app.py b/src/web/app.py
+index e82dc22..143c7b9 100644
+--- a/src/web/app.py
++++ b/src/web/app.py
+@@ -17,7 +17,7 @@ from pathlib import Path
+ from threading import Lock
+ from typing import Annotated
+ 
+-from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
++from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+ from fastapi.responses import FileResponse
+ from fastapi.staticfiles import StaticFiles
+ 
+@@ -134,11 +134,24 @@ def create_app(
+         file: Annotated[
+             UploadFile, File(description="Audio file to analyze")
+         ],
++        criteria: Annotated[
++            str | None,
++            Form(description="JSON array of criteria objects with id, name, description, block fields"),
++        ] = None,
+         x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+     ) -> dict:
+         config = request.app.state.config
+         temp_dir: Path | None = None
+ 
++        parsed_criteria = None
++        if criteria:
++            try:
++                parsed_criteria = json.loads(criteria)
++                if not isinstance(parsed_criteria, list):
++                    raise ValueError("criteria must be a JSON array")
++            except (json.JSONDecodeError, ValueError) as exc:
++                raise HTTPException(status_code=422, detail=f"Invalid criteria JSON: {exc}") from exc
++
+         try:
+             _require_api_key_if_needed(config, x_api_key)
+             _enforce_rate_limit(request, config)
+@@ -149,6 +162,7 @@ def create_app(
+                 safe_name,
+                 True,
+                 None,
++                parsed_criteria,
+             )
+             return result.to_api_dict()
+         except HTTPException:

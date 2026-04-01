@@ -1,0 +1,145 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: malikov_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: malikov
+      POSTGRES_USER: malikov
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-malikov_dev}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:-malikov_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malikov -d malikov"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: malikov_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  pipeline:
+    build:
+      context: ${PIPELINE_BUILD_CONTEXT:-./pipeline}
+      dockerfile: ${PIPELINE_DOCKERFILE:-../pipeline.Dockerfile}
+    container_name: malikov_pipeline
+    restart: unless-stopped
+    environment:
+      WEB__HOST: "0.0.0.0"
+      WEB__PORT: "8001"
+      WEB__REQUIRE_API_KEY: ${PIPELINE_REQUIRE_API_KEY:-false}
+      WEB__API_KEY: ${PIPELINE_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      QUALITY_ANALYSIS__ENABLED: ${PIPELINE_QUALITY_ENABLED:-true}
+      QUALITY_ANALYSIS__PROVIDER: ${PIPELINE_QUALITY_PROVIDER:-openrouter}
+      QUALITY_ANALYSIS__MODEL: ${PIPELINE_QUALITY_MODEL:-openai/gpt-4.1}
+      QUALITY_ANALYSIS__BASE_URL: ${PIPELINE_QUALITY_BASE_URL:-https://openrouter.ai/api/v1}
+      QUALITY_ANALYSIS__API_KEY_ENV: ${PIPELINE_QUALITY_API_KEY_ENV:-OPENROUTER_API_KEY}
+      QUALITY_ANALYSIS__TIMEOUT: ${PIPELINE_QUALITY_TIMEOUT:-300}
+      QUALITY_ANALYSIS__RETRY_ATTEMPTS: ${PIPELINE_QUALITY_RETRY_ATTEMPTS:-3}
+      ANALYTICS__ENABLED: ${ANALYTICS_ENABLED:-true}
+      ANALYTICS__TELEGRAM__ENABLED: ${TELEGRAM_ENABLED:-false}
+      ANALYTICS__TELEGRAM__BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ANALYTICS__TELEGRAM__CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ANALYTICS__TELEGRAM__DAILY_TIME: ${TELEGRAM_DAILY_TIME:-09:00}
+      ANALYTICS__TELEGRAM__WEEKLY_DAY: ${TELEGRAM_WEEKLY_DAY:-monday}
+      ANALYTICS__TELEGRAM__WEEKLY_TIME: ${TELEGRAM_WEEKLY_TIME:-10:00}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${PIPELINE_BUILD_CONTEXT:-./pipeline}/config.yaml:/home/asruser/app/config.yaml:ro
+      - pipeline_output:/home/asruser/app/output
+      - pipeline_metadata:/home/asruser/app/metadata
+      - pipeline_quality:/home/asruser/app/quality_analysis
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8001/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+  app:
+    build: .
+    container_name: malikov_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      pipeline:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/malikov
+      DB_USER: malikov
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-malikov_dev}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production_min_32_chars}
+      JWT_ACCESS_TTL_MINUTES: 15
+      JWT_REFRESH_TTL_DAYS: 30
+      PYTHON_PIPELINE_URL: http://pipeline:8001
+      PIPELINE_API_KEY: ${PIPELINE_API_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      TELEGRAM_BOT_ENABLED: ${TELEGRAM_BOT_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_REPORT_DAILY_ENABLED: ${TELEGRAM_REPORT_DAILY_ENABLED:-true}
+      TELEGRAM_REPORT_WEEKLY_ENABLED: ${TELEGRAM_REPORT_WEEKLY_ENABLED:-true}
+      TELEGRAM_DAILY_TIME: ${TELEGRAM_DAILY_TIME:-09:00}
+      TELEGRAM_WEEKLY_DAY: ${TELEGRAM_WEEKLY_DAY:-monday}
+      TELEGRAM_WEEKLY_TIME: ${TELEGRAM_WEEKLY_TIME:-10:00}
+      TELEGRAM_LINK_CODE_TTL_MINUTES: ${TELEGRAM_LINK_CODE_TTL_MINUTES:-5}
+      LLM_API_BASE_URL: ${PIPELINE_QUALITY_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_API_KEY: ${OPENROUTER_API_KEY:-${OPENAI_API_KEY:-}}
+      LLM_MODEL: ${PIPELINE_QUALITY_MODEL:-openai/gpt-4.1}
+      AUDIO_STORAGE_PATH: /data/audio
+      AUDIO_RETENTION_DAYS: ${AUDIO_RETENTION_DAYS:-30}
+    ports:
+      - "8080:8080"
+    volumes:
+      - audio_data:/data/audio
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    container_name: malikov_frontend
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/ > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  audio_data:
+  pipeline_output:
+  pipeline_metadata:
+  pipeline_quality:

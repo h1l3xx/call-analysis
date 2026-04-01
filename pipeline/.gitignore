@@ -1,0 +1,135 @@
+# ⚠️ КРИТИЧНО: Защита персональных данных и конфиденциальной информации
+# ======================================================================
+
+# Virtual Environment
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment Variables
+.env
+.env.*
+!**/.env.example
+
+# ⚠️ ПЕРСОНАЛЬНЫЕ ДАННЫЕ КЛИЕНТОВ (PII - Personal Identifiable Information)
+# ======================================================================
+# Аудиофайлы с записями звонков
+input/
+*.mp3
+*.wav
+*.m4a
+*.ogg
+*.flac
+
+# Транскрипции звонков (содержат ФИО, телефоны, адреса)
+output/
+*.txt
+
+# Метаданные звонков (классификация, PII)
+metadata/
+*.json
+
+# Архивы обработанных звонков
+archive/
+*.tar.gz
+*.zip
+
+# Аналитика и статистика (реальные данные)
+analytics/
+*.db
+*.sqlite
+*.sqlite3
+
+# Анализ качества (оценки реальных звонков)
+quality_analysis/
+
+# Логи обработки (могут содержать PII)
+logs/
+*.log
+
+# Карантин (битые файлы, могут содержать PII)
+quarantine/
+
+# ⚠️ КОНФИДЕНЦИАЛЬНЫЕ КОНФИГУРАЦИИ
+# ======================================================================
+# Реальные конфигурации с секретами
+config.yaml
+config.local.yaml
+config.production.yaml
+config.staging.yaml
+
+# API ключи и credentials
+credentials/
+google_credentials.json
+*.pem
+*.key
+*.crt
+
+# Файлы с реальными адресами филиалов и именами сотрудников
+branches.yaml
+
+# ⚠️ ВРЕМЕННЫЕ И СЛУЖЕБНЫЕ ФАЙЛЫ
+# ======================================================================
+# Временные файлы
+*.tmp
+*.temp
+.cache/
+temp/
+tmp/
+
+# IDE и редакторы
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Models Cache (faster-whisper, transformers)
+~/.cache/huggingface/
+models_cache/
+temp_models/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Uploads и downloads
+uploads/
+downloads/
+temp_uploads/
+
+# Results и reports (могут содержать PII)
+results/
+reports/
+exports/
+*.csv
+
+# ⚠️ ВАЖНО: Примеры конфигураций МОЖНО публиковать
+# ======================================================================
+# Эти файлы содержат только примеры без реальных данных:
+!config.example.yaml
+!branches.example.yaml
+!credentials/README.md
+# Synthetic examples in docs (no real PII; overrides global *.txt / *.json ignores)
+!docs/examples/
+!docs/examples/**
+
+# Внутренняя документация с клиент-специфичной информацией
+Бесперебойная работа.md

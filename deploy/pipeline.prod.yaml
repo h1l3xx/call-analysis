@@ -1,0 +1,119 @@
+# Production config — RTX 2080Ti 11GB VRAM, i5-12600, 32GB RAM
+# This file is mounted as config.yaml inside the pipeline container.
+
+asr:
+  model: "large-v3"
+  model_preset: ""
+  device: "cuda"
+  compute_type: "float16"
+  cpu_threads: 6
+  beam_size: 5
+  temperature: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  vad_filter: true
+  initial_prompt: "Ваша компания, администратор, запись на прием, диагностика, консультация"
+  language: "ru"
+
+  preprocessing:
+    wake_signal:
+      enabled: true
+      samples: 8000
+      rms: 0.0504
+    normalize_volume: true
+    target_sample_rate: 16000
+
+diarization:
+  enabled: true
+  model: "pyannote/speaker-diarization-3.1"
+  min_speakers: 2
+  max_speakers: 2
+  device: "cuda"
+
+vllm:
+  enabled: false
+  base_url: "http://localhost:8000/v1"
+  model: ""
+  temperature: 0.1
+  max_tokens: 12000
+  timeout: 180
+  retry_attempts: 3
+  retry_delay: 2.0
+
+cleanup:
+  enabled: true
+  input_retention_days: 30
+  compress_after_days: 7
+  max_disk_usage_percent: 80
+  schedule_hour: 3
+  archive_path: "./archive"
+
+performance:
+  concurrent_tasks: 2
+  batch_size: 1
+
+paths:
+  input: "./input"
+  output: "./output"
+  metadata: "./metadata"
+  archive: "./archive"
+  logs: "./logs"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+  files:
+    main: "logs/asr-watcher.log"
+    errors: "logs/errors.log"
+  rotation:
+    max_bytes: 10485760
+    backup_count: 5
+
+quality_analysis:
+  enabled: false
+  auto_analyze: true
+  provider: "openrouter"
+  model: "openai/gpt-4.1"
+  base_url: "https://openrouter.ai/api/v1"
+  temperature: 0.1
+  max_tokens: 8000
+  timeout: 300
+  retry_attempts: 3
+
+  scripts:
+    script_template_a: "templates/script_evaluation_template_a.md"
+    script_template_b: "templates/script_evaluation_template_b.md"
+
+  paths:
+    individual: "./quality_analysis/individual"
+    aggregated: "./quality_analysis/aggregated"
+    reports: "./quality_analysis/reports"
+
+analytics:
+  enabled: true
+  db_path: "./analytics/analytics.db"
+  required_criteria: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  optional_criteria: [21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+  err_rate_critical: 0.85
+  miss_rate_critical: 0.80
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+    daily_time: "09:00"
+    weekly_day: "monday"
+    weekly_time: "10:00"
+
+google_sheets:
+  enabled: false
+  credentials_path: ""
+  spreadsheet_id: ""
+
+security:
+  allowed_extensions: [".mp3", ".wav", ".m4a", ".ogg", ".flac"]
+  max_file_size_mb: 500
+  rate_limit_per_hour: 2000
+
+web:
+  host: "0.0.0.0"
+  port: 8001
+  require_api_key: true
+  api_key: ""

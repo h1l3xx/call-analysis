@@ -1,0 +1,79 @@
+# Production overlay for RTX 2080Ti (11GB) + i5-12600 + 32GB RAM
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    ports: []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?Set DB_APP_PASSWORD in .env}
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=256MB
+      -c max_connections=100
+      -c logging_collector=on
+      -c log_min_duration_statement=1000
+
+  redis:
+    ports: []
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  pipeline:
+    ports: []
+    build:
+      context: ${PIPELINE_BUILD_CONTEXT:-./pipeline}
+      dockerfile: ${PIPELINE_DOCKERFILE_GPU:-../pipeline-gpu.Dockerfile}
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ./deploy/pipeline.prod.yaml:/home/asruser/app/config.yaml:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 14g
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8001/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+  app:
+    environment:
+      ENVIRONMENT: production
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (min 32 chars)}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  frontend:
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
