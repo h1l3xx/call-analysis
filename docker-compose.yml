@@ -143,3 +143,5 @@ volumes:
   pipeline_output:
   pipeline_metadata:
   pipeline_quality:
+  caddy_data:
+  caddy_config:

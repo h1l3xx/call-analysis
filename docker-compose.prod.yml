@@ -65,16 +65,36 @@ services:
       ENVIRONMENT: production
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (min 32 chars)}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "127.0.0.1:8080:8080"
     deploy:
       resources:
         limits:
           memory: 2g
 
   frontend:
-    ports:
-      - "${FRONTEND_PORT:-80}:80"
+    ports: []
     deploy:
       resources:
         limits:
           memory: 256m
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: malikov_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128m

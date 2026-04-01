@@ -95,6 +95,10 @@ validate_secrets() {
       log_warn "HF_TOKEN not set. Speaker diarization requires a HuggingFace token."
       log_warn "Get one at: https://huggingface.co/settings/tokens"
     fi
+    if [[ -z "${DOMAIN:-}" || "${DOMAIN:-}" == "localhost" || "${DOMAIN:-}" == *"YOUR_NAME"* ]]; then
+      log_warn "DOMAIN not set. HTTPS will not work without a real domain."
+      log_warn "Get a free one at: https://www.duckdns.org"
+    fi
 
     if [[ "$has_errors" == "true" ]]; then
       log_error "Fix secrets in $ENV_FILE before production deploy."
@@ -536,8 +540,8 @@ deploy_all() {
   # Wait for health
   echo ""
   wait_healthy "Pipeline" "http://localhost:8001/healthz" 360
-  wait_healthy "Backend"  "http://localhost:${APP_PORT:-8080}/health" 120
-  wait_healthy "Frontend" "http://localhost:${FRONTEND_PORT:-80}/" 60
+  wait_healthy "Backend"  "http://localhost:8080/health" 120
+  wait_healthy "Frontend (via Caddy)" "http://localhost:80/" 60
 
   echo ""
   log_ok "=== Deploy complete ==="
