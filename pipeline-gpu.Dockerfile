@@ -30,13 +30,13 @@ LABEL description="Call Analytics — Whisper large-v3 (GPU) + pyannote diarizat
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
-    python3.12 python3.12-venv python3.12-dev \
-    libgomp1 libsndfile1 ffmpeg wget curl \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa || true \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common curl wget \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update \
-    && apt-get install -y python3.12 python3.12-venv python3.12-dev \
+    && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv python3.12-dev \
+    libgomp1 libsndfile1 ffmpeg \
     && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
