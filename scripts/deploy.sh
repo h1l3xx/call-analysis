@@ -159,15 +159,20 @@ check_gpu() {
 # ── Pipeline repo management ─────────────────────────────────────────────────
 
 ensure_pipeline_repo() {
-  if [[ ! -d "$PIPELINE_BUILD_CONTEXT/.git" ]]; then
+  if [[ -f "$PIPELINE_BUILD_CONTEXT/pyproject.toml" ]]; then
+    log_ok "Pipeline source already present in $PIPELINE_BUILD_CONTEXT"
+    if [[ -d "$PIPELINE_BUILD_CONTEXT/.git" ]]; then
+      log_info "Updating pipeline repo..."
+      git -C "$PIPELINE_BUILD_CONTEXT" fetch origin "$PIPELINE_GIT_REF" 2>/dev/null || true
+      git -C "$PIPELINE_BUILD_CONTEXT" pull --ff-only origin "$PIPELINE_GIT_REF" 2>/dev/null || true
+    fi
+  else
     log_info "Cloning pipeline repo into $PIPELINE_BUILD_CONTEXT ..."
+    if [[ -d "$PIPELINE_BUILD_CONTEXT" ]]; then
+      rm -rf "$PIPELINE_BUILD_CONTEXT"
+    fi
     mkdir -p "$(dirname "$PIPELINE_BUILD_CONTEXT")"
     git clone --branch "$PIPELINE_GIT_REF" "$PIPELINE_GIT_URL" "$PIPELINE_BUILD_CONTEXT"
-  else
-    log_info "Updating pipeline repo in $PIPELINE_BUILD_CONTEXT ..."
-    git -C "$PIPELINE_BUILD_CONTEXT" fetch origin "$PIPELINE_GIT_REF"
-    git -C "$PIPELINE_BUILD_CONTEXT" checkout "$PIPELINE_GIT_REF"
-    git -C "$PIPELINE_BUILD_CONTEXT" pull --ff-only origin "$PIPELINE_GIT_REF" || true
   fi
 
   if [[ ! -f "$ROOT_DIR/deploy/pipeline.prod.yaml" ]]; then
@@ -179,6 +184,11 @@ ensure_pipeline_repo() {
 apply_pipeline_patch() {
   if [[ "$APPLY_PIPELINE_PATCH" != "true" ]]; then
     log_info "Skipping pipeline patch (APPLY_PIPELINE_PATCH=$APPLY_PIPELINE_PATCH)"
+    return
+  fi
+
+  if [[ ! -d "$PIPELINE_BUILD_CONTEXT/.git" ]]; then
+    log_info "Pipeline is embedded (no .git) — skipping patch (already applied)."
     return
   fi
 
@@ -505,15 +515,6 @@ deploy_all() {
   # Backup existing database if postgres is running
   if docker compose ps postgres --format '{{.State}}' 2>/dev/null | grep -q running; then
     backup_db || true
-  fi
-
-  # Build backend
-  log_info "Building backend fat jar ..."
-  if [[ -f "./gradlew" ]]; then
-    chmod +x ./gradlew
-    ./gradlew shadowJar --no-daemon -q
-  else
-    log_warn "gradlew not found — assuming pre-built jar exists"
   fi
 
   # Start

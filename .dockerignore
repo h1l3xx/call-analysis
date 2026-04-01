@@ -6,13 +6,13 @@
 .env.*
 !.env.example
 build/
-!build/libs/malikov-backend.jar
 frontend/
 pipeline/
+deploy/
 patches/
 scripts/
+backups/
 *.md
-*.patch
 docker-compose*.yml
 pipeline.Dockerfile
 pipeline-gpu.Dockerfile
