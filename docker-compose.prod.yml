@@ -39,6 +39,7 @@ services:
     build:
       context: ${PIPELINE_BUILD_CONTEXT:-./pipeline}
       dockerfile: ${PIPELINE_DOCKERFILE_GPU:-../pipeline-gpu.Dockerfile}
+      network: host
     environment:
       HF_TOKEN: ${HF_TOKEN:-}
     volumes:
@@ -60,6 +61,9 @@ services:
       start_period: 300s
 
   app:
+    build:
+      context: .
+      network: host
     environment:
       ENVIRONMENT: production
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (min 32 chars)}
