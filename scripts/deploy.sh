@@ -566,6 +566,19 @@ case "${1:-deploy}" in
     ;;
   rebuild)
     local_service="${2:-}"
+    # Rebuild JAR if source changed (needed for app/all)
+    if [[ -z "$local_service" || "$local_service" == "app" ]]; then
+      if [[ ! -f "$ROOT_DIR/build/libs/malikov-backend.jar" ]] || [[ -n "$(find "$ROOT_DIR/src" -newer "$ROOT_DIR/build/libs/malikov-backend.jar" 2>/dev/null | head -1)" ]]; then
+        log_info "Building backend JAR (Gradle via Docker) ..."
+        docker run --rm --network=host \
+          -v "$ROOT_DIR":/build -w /build \
+          eclipse-temurin:21-jdk-alpine \
+          sh -c "chmod +x gradlew && ./gradlew --no-daemon buildFatJar"
+        log_ok "Backend JAR built."
+      else
+        log_ok "Backend JAR is up to date."
+      fi
+    fi
     if [[ -z "$local_service" ]]; then
       log_info "Rebuilding all services..."
       dc up --build -d
