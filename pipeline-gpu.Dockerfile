@@ -34,8 +34,7 @@ COPY --chown=asruser:asruser pyproject.toml uv.lock uv.toml README.md ./
 
 # Install dependencies as root (uv needs write access), then fix ownership
 ENV UV_HTTP_TIMEOUT=300
-RUN uv sync --frozen --no-dev --python python3.12 \
-    && chown -R asruser:asruser /home/asruser/app/.venv
+RUN uv sync --frozen --no-dev --python python3.12
 
 # Copy app code
 COPY --chown=asruser:asruser src/ ./src/
@@ -44,9 +43,10 @@ COPY --chown=asruser:asruser templates/ ./templates/
 COPY --chown=asruser:asruser config.example.yaml ./config.yaml
 COPY --chown=asruser:asruser branches.yaml* ./
 
-USER asruser
+RUN mkdir -p logs input output metadata archive analytics quality_analysis quarantine \
+    && chown -R asruser:asruser /home/asruser/app
 
-RUN mkdir -p logs input output metadata archive analytics quality_analysis quarantine
+USER asruser
 
 ENV PATH="/home/asruser/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/home/asruser/app"
