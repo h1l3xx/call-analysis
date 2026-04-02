@@ -42,7 +42,7 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
                 managerRoutes(services.managerService)
                 scriptRoutes(services.scriptService)
                 callRoutes(services.callService, services.audioStorageService)
-                batchRoutes(services.batchRepository, services.batchSummaryService)
+                batchRoutes(services.batchRepository, services.batchSummaryService, services.batchExportService)
                 pipelineRoutes(services.pipelineService)
                 telegramRoutes(services.telegramLinkService, config.telegram.linkCodeTtlMin)
                 departmentLeadRoutes(services.departmentLeadRepository)

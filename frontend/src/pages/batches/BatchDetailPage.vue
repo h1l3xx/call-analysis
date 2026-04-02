@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { ArrowLeft, RefreshCw, Phone, Building } from 'lucide-vue-next'
+import { ArrowLeft, RefreshCw, Phone, Building, Download } from 'lucide-vue-next'
 import { batchesApi } from '@/api'
 import type { BatchResponse, BatchSummaryResponse, CallResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
@@ -16,6 +16,7 @@ const calls = ref<CallResponse[]>([])
 const loading = ref(true)
 const callsLoading = ref(false)
 const summarizing = ref(false)
+const exporting = ref(false)
 const tab = ref<'all' | 'internal' | 'external'>('all')
 const callsPage = ref(1)
 const callsTotalPages = ref(1)
@@ -54,6 +55,15 @@ async function regenerateSummary() {
     await fetchBatch()
   } finally {
     summarizing.value = false
+  }
+}
+
+async function exportCsv() {
+  exporting.value = true
+  try {
+    await batchesApi.exportCsv(batchId.value)
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -148,6 +158,15 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
             <span class="text-sm text-gray-500">{{ formatDate(batch.createdAt) }}</span>
           </div>
           <div class="flex items-center gap-3 text-sm text-gray-600">
+            <button
+              v-if="batch.status === 'done'"
+              :disabled="exporting"
+              class="flex items-center gap-1.5 px-3 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50"
+              @click="exportCsv"
+            >
+              <Download class="w-3.5 h-3.5" :class="{ 'animate-bounce': exporting }" />
+              Скачать CSV
+            </button>
             <span>{{ batch.processedCalls }}/{{ batch.totalCalls }} звонков</span>
           </div>
         </div>

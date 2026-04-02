@@ -4,6 +4,7 @@ import com.malikov.auth.Role
 import com.malikov.config.NotFoundException
 import com.malikov.db.BatchRepository
 import com.malikov.dto.*
+import com.malikov.service.BatchExportService
 import com.malikov.service.BatchSummaryService
 import io.ktor.http.*
 import io.ktor.server.application.call
@@ -16,6 +17,7 @@ import java.util.UUID
 fun Route.batchRoutes(
     batchRepo: BatchRepository,
     batchSummaryService: BatchSummaryService,
+    batchExportService: BatchExportService,
 ) {
     val json = Json { ignoreUnknownKeys = true }
 
@@ -98,6 +100,19 @@ fun Route.batchRoutes(
             val batchId = pathUuid("id")
             batchSummaryService.generateBatchSummary(p.schema!!, batchId)
             call.respond(mapOf("status" to "ok", "message" to "Summary regenerated"))
+        }
+
+        get("/{id}/export") {
+            val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val batchId = pathUuid("id")
+            val csv = batchExportService.generateCsv(p.schema!!, batchId)
+            call.response.header(
+                HttpHeaders.ContentDisposition,
+                ContentDisposition.Attachment.withParameter(
+                    ContentDisposition.Parameters.FileName, "batch-${batchId}.csv"
+                ).toString()
+            )
+            call.respondText(csv, ContentType.Text.CSV)
         }
     }
 

@@ -43,6 +43,7 @@ class ServiceRegistry(config: AppConfig) {
 
     val pipelineService      = PipelineService(pipelineClient, pipelineResultWriter, internalCallEvaluator)
     val batchSummaryService   = BatchSummaryService(batchRepository)
+    val batchExportService    = BatchExportService(batchRepository, callRepository)
 
     // Batch processing orchestrator
     val batchProcessingService = BatchProcessingService(

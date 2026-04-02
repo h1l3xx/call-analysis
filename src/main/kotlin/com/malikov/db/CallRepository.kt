@@ -168,6 +168,79 @@ class CallRepository {
             .map { row -> row[cl.id] to row[cl.audioS3Key]!! }
     }
 
+    fun findResultsByBatch(schema: String, batchId: UUID): List<CallResultRow> = transaction {
+        val cl = TCalls(schema)
+        val m  = TManagers(schema)
+        val s  = TScripts(schema)
+        val t  = TTranscriptions(schema)
+        val sm = TSpeakerMetrics(schema)
+        val qs = TQualityScores(schema)
+
+        val callRows = cl.join(m, JoinType.LEFT, cl.managerId, m.id)
+            .join(Users, JoinType.LEFT, m.userId, Users.id)
+            .join(s, JoinType.LEFT, cl.scriptId, s.id)
+            .selectAll()
+            .where { cl.batchId eq batchId }
+            .orderBy(cl.createdAt, SortOrder.ASC)
+            .map { it.toCallRow(cl, m, s) }
+
+        val callIds = callRows.map { it.id }
+        if (callIds.isEmpty()) return@transaction emptyList()
+
+        val transcriptions = t.selectAll()
+            .where { t.callId inList callIds }
+            .associate { row ->
+                row[t.callId] to TranscriptionRow(
+                    rawText        = row[t.rawText],
+                    cleanedText    = row[t.cleanedText],
+                    language       = row[t.language],
+                    languageProb   = row[t.languageProb],
+                    classification = row[t.classification],
+                    speakerTurns   = row[t.speakerTurns],
+                )
+            }
+
+        val metrics = sm.selectAll()
+            .where { sm.callId inList callIds }
+            .associate { row ->
+                row[sm.callId] to SpeakerMetricsRow(
+                    managerTalkRatio    = row[sm.managerTalkRatio],
+                    clientTalkRatio     = row[sm.clientTalkRatio],
+                    silenceRatio        = row[sm.silenceRatio],
+                    interruptionsCount  = row[sm.interruptionsCount],
+                    avgPauseSeconds     = row[sm.avgPauseSeconds],
+                    managerWpm          = row[sm.managerWpm],
+                    clientWpm           = row[sm.clientWpm],
+                    longestMonologueSec = row[sm.longestMonologueSec],
+                )
+            }
+
+        val quality = qs.selectAll()
+            .where { qs.callId inList callIds }
+            .associate { row ->
+                row[qs.callId] to QualityScoreRow(
+                    overallScore    = row[qs.overallScore],
+                    requiredScore   = row[qs.requiredScore],
+                    optionalScore   = row[qs.optionalScore],
+                    criteria        = row[qs.criteria],
+                    strengths       = row[qs.strengths],
+                    weaknesses      = row[qs.weaknesses],
+                    recommendations = row[qs.recommendations],
+                    summary         = row[qs.summary],
+                )
+            }
+
+        callRows.map { call ->
+            CallResultRow(
+                call           = call,
+                transcription  = transcriptions[call.id],
+                speakerMetrics = metrics[call.id],
+                qualityScore   = quality[call.id],
+                errors         = emptyList(),
+            )
+        }
+    }
+
     fun findResult(schema: String, callId: UUID): CallResultRow? = transaction {
         val cl = TCalls(schema)
         val m  = TManagers(schema)
