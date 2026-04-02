@@ -144,10 +144,10 @@ class BatchExportService(
     }
 
     private fun csvRow(vararg values: String): String =
-        values.joinToString(",") { escapeCsv(it) }
+        values.joinToString(";") { escapeCsv(it) }
 
     private fun escapeCsv(value: String): String {
-        val needsQuoting = value.contains(',') || value.contains('"') ||
+        val needsQuoting = value.contains(';') || value.contains('"') ||
                 value.contains('\n') || value.contains('\r')
         return if (needsQuoting) {
             "\"${value.replace("\"", "\"\"")}\""
