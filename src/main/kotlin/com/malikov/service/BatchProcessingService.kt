@@ -5,6 +5,7 @@ import com.malikov.pipeline.PipelineClient
 import com.malikov.pipeline.PipelineCriterionInput
 import com.malikov.pipeline.PipelineException
 import com.malikov.pipeline.PipelineResultWriter
+import com.malikov.telegram.BatchNotificationService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import org.jetbrains.exposed.sql.selectAll
@@ -14,12 +15,6 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
 
-/**
- * Двухфазная оркестрация обработки батча:
- *   Phase A — транскрипция всех звонков (pipeline без quality analysis)
- *   Phase B — оценка LLM (внешние → по скрипту, внутренние → специальный промпт)
- *   Phase C — суммаризация батча
- */
 class BatchProcessingService(
     private val pipelineClient: PipelineClient,
     private val resultWriter: PipelineResultWriter,
@@ -28,6 +23,7 @@ class BatchProcessingService(
     private val scriptRepo: ScriptRepository,
     private val internalCallEvaluator: InternalCallEvaluator,
     private val batchSummaryService: BatchSummaryService,
+    private val batchNotificationService: BatchNotificationService?,
     maxConcurrency: Int = 3,
 ) {
     private val log = LoggerFactory.getLogger(BatchProcessingService::class.java)
@@ -61,6 +57,12 @@ class BatchProcessingService(
 
                 batchRepo.updateStatus(schema, batchId, "done")
                 log.info("Batch {} fully processed", batchId)
+
+                try {
+                    batchNotificationService?.notifyBatchCompleted(schema, batchId)
+                } catch (e: Exception) {
+                    log.error("Failed to send batch notification for {}", batchId, e)
+                }
             } catch (e: Exception) {
                 log.error("Batch {} processing failed", batchId, e)
                 batchRepo.updateStatus(schema, batchId, "failed")

@@ -45,6 +45,7 @@ data class AppConfig(
                 weeklyDay     = env("TELEGRAM_WEEKLY_DAY", "monday"),
                 weeklyTime    = env("TELEGRAM_WEEKLY_TIME", "10:00"),
                 linkCodeTtlMin = env("TELEGRAM_LINK_CODE_TTL_MINUTES", "5").toLong(),
+                timezone = env("TELEGRAM_TIMEZONE", "Europe/Moscow"),
             ),
         )
 
@@ -89,4 +90,5 @@ data class TelegramConfig(
     val weeklyDay: String,
     val weeklyTime: String,
     val linkCodeTtlMin: Long,
+    val timezone: String,
 )

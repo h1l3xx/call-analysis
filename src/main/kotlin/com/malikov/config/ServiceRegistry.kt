@@ -7,6 +7,7 @@ import com.malikov.pipeline.PipelineClient
 import com.malikov.pipeline.PipelineResultWriter
 import com.malikov.pipeline.PipelineService
 import com.malikov.service.*
+import com.malikov.telegram.BatchNotificationService
 import com.malikov.telegram.ReportScheduler
 import com.malikov.telegram.TelegramBotService
 import com.malikov.telegram.TelegramLinkService
@@ -45,10 +46,16 @@ class ServiceRegistry(config: AppConfig) {
     val batchSummaryService   = BatchSummaryService(batchRepository)
     val batchExportService    = BatchExportService(batchRepository, callRepository, managerRepository)
 
+    // Telegram
+    val telegramLinkService = TelegramLinkService(redisService, config.telegram)
+    val telegramBotService  = TelegramBotService(config.telegram, telegramLinkService)
+    val batchNotificationService = BatchNotificationService(telegramBotService, batchRepository)
+
     // Batch processing orchestrator
     val batchProcessingService = BatchProcessingService(
         pipelineClient, pipelineResultWriter, batchRepository,
         callRepository, scriptRepository, internalCallEvaluator, batchSummaryService,
+        batchNotificationService,
     )
 
     // Audio storage
@@ -67,15 +74,14 @@ class ServiceRegistry(config: AppConfig) {
     )
     val tenantAdminService = TenantAdminService(tenantAdminRepository)
 
-    // Telegram
-    val telegramLinkService = TelegramLinkService(redisService, config.telegram)
-    val telegramBotService  = TelegramBotService(config.telegram, telegramLinkService)
     val telegramReportService = TelegramReportService(
         reportRepository, departmentLeadRepository, managerRepository, telegramBotService,
     )
     val reportScheduler = ReportScheduler(config.telegram, telegramReportService)
 
     fun startBackgroundServices() {
+        telegramBotService.reportService = telegramReportService
+        telegramBotService.reportRepo = reportRepository
         telegramBotService.start()
         reportScheduler.start()
         audioCleanupScheduler.start()

@@ -1,6 +1,8 @@
 package com.malikov.telegram
 
 import com.malikov.config.TelegramConfig
+import com.malikov.db.ReportRepository
+import com.malikov.db.TenantUserInfo
 import com.malikov.db.Users
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -14,7 +16,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
@@ -70,7 +71,7 @@ class TelegramBotService(
     private val linkService: TelegramLinkService,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val apiBase = "https://api.telegram.org/bot${config.botToken}"
 
     private val httpClient = HttpClient(CIO) {
@@ -80,6 +81,9 @@ class TelegramBotService(
     }
 
     private var offset: Long = 0
+
+    var reportService: TelegramReportService? = null
+    var reportRepo: ReportRepository? = null
 
     fun start() {
         if (!config.enabled || config.botToken.isBlank()) {
@@ -143,13 +147,12 @@ class TelegramBotService(
             text.startsWith("/link") -> handleLink(chatId, text)
             text == "/unlink" -> handleUnlink(chatId)
             text == "/status" -> handleStatus(chatId)
+            text == "/report" -> handleReport(chatId)
+            text == "/week" -> handleWeek(chatId)
+            text == "/department" -> handleDepartment(chatId)
+            text == "/help" -> handleHelp(chatId)
             text.matches(Regex("^\\d{6}$")) -> handleLink(chatId, "/link $text")
-            else -> sendMessage(chatId,
-                "Неизвестная команда. Доступные команды:\n" +
-                "/link <код> — привязать аккаунт\n" +
-                "/unlink — отвязать аккаунт\n" +
-                "/status — статус привязки"
-            )
+            else -> handleHelp(chatId)
         }
     }
 
@@ -161,7 +164,8 @@ class TelegramBotService(
             "1. Откройте настройки профиля на сайте\n" +
             "2. Нажмите «Привязать Telegram» и скопируйте код\n" +
             "3. Отправьте мне: <code>/link ВАШ_КОД</code>\n\n" +
-            "Или просто отправьте 6-значный код."
+            "Или просто отправьте 6-значный код.\n\n" +
+            "Команды: /help"
         )
     }
 
@@ -172,15 +176,11 @@ class TelegramBotService(
             return
         }
 
-        when (val result = linkService.verifyAndLink(code, chatId)) {
+        when (linkService.verifyAndLink(code, chatId)) {
             is TelegramLinkService.LinkResult.Success ->
-                sendMessage(chatId,
-                    "Аккаунт успешно привязан! Теперь вы будете получать отчёты в этот чат."
-                )
+                sendMessage(chatId, "Аккаунт успешно привязан! Теперь вы будете получать отчёты в этот чат.")
             is TelegramLinkService.LinkResult.InvalidCode ->
-                sendMessage(chatId,
-                    "Код недействителен или истёк. Получите новый код в настройках профиля."
-                )
+                sendMessage(chatId, "Код недействителен или истёк. Получите новый код в настройках профиля.")
             is TelegramLinkService.LinkResult.UserNotFound ->
                 sendMessage(chatId, "Пользователь не найден. Проверьте код и попробуйте снова.")
         }
@@ -203,6 +203,52 @@ class TelegramBotService(
         } else {
             sendMessage(chatId, "Ваш Telegram привязан к аккаунту Malikov. Отчёты включены.")
         }
+    }
+
+    private suspend fun handleReport(chatId: Long) {
+        val user = resolveUser(chatId) ?: return
+        val sinceMs = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+        val text = reportService?.buildReportForUser(user, sinceMs, "за последние 24 часа", "Личный")
+        sendMessage(chatId, text ?: "Нет данных за последние 24 часа.")
+    }
+
+    private suspend fun handleWeek(chatId: Long) {
+        val user = resolveUser(chatId) ?: return
+        val sinceMs = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
+        val text = reportService?.buildReportForUser(user, sinceMs, "за последние 7 дней", "Недельный")
+        sendMessage(chatId, text ?: "Нет данных за последнюю неделю.")
+    }
+
+    private suspend fun handleDepartment(chatId: Long) {
+        val user = resolveUser(chatId) ?: return
+        if (user.role != "TEAM_LEAD" && user.role != "CLIENT_ADMIN") {
+            sendMessage(chatId, "Эта команда доступна только руководителям и администраторам.")
+            return
+        }
+        val sinceMs = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+        val text = reportService?.buildReportForUser(user, sinceMs, "за последние 24 часа", "Отдел")
+        sendMessage(chatId, text ?: "Нет данных по отделу.")
+    }
+
+    private suspend fun handleHelp(chatId: Long) {
+        sendMessage(chatId,
+            "\uD83D\uDCCB <b>Доступные команды:</b>\n\n" +
+            "/report — личный отчёт за 24 часа\n" +
+            "/week — личный отчёт за неделю\n" +
+            "/department — статистика отдела (руководители)\n" +
+            "/status — статус привязки аккаунта\n" +
+            "/link <code>КОД</code> — привязать аккаунт\n" +
+            "/unlink — отвязать аккаунт\n" +
+            "/help — эта справка"
+        )
+    }
+
+    private suspend fun resolveUser(chatId: Long): TenantUserInfo? {
+        val user = reportRepo?.findUserByTelegramChat(chatId)
+        if (user == null) {
+            sendMessage(chatId, "Ваш аккаунт не привязан. Используйте /link <код> для привязки.")
+        }
+        return user
     }
 
     private fun findUserByChatId(chatId: Long): java.util.UUID? = transaction {

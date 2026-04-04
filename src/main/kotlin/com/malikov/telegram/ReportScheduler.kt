@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.*
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 private val log = KotlinLogging.logger {}
 
@@ -14,6 +15,12 @@ class ReportScheduler(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    private val zone: ZoneId = try {
+        ZoneId.of(config.timezone)
+    } catch (_: Exception) {
+        log.warn { "Invalid timezone '${config.timezone}', falling back to Europe/Moscow" }
+        ZoneId.of("Europe/Moscow")
+    }
 
     fun start() {
         if (!config.enabled || config.botToken.isBlank()) {
@@ -23,12 +30,12 @@ class ReportScheduler(
 
         if (config.dailyEnabled) {
             scope.launch { dailyLoop() }
-            log.info { "Daily report scheduler started (time=${config.dailyTime})" }
+            log.info { "Daily report scheduler started (time=${config.dailyTime}, tz=$zone)" }
         }
 
         if (config.weeklyEnabled) {
             scope.launch { weeklyLoop() }
-            log.info { "Weekly report scheduler started (day=${config.weeklyDay}, time=${config.weeklyTime})" }
+            log.info { "Weekly report scheduler started (day=${config.weeklyDay}, time=${config.weeklyTime}, tz=$zone)" }
         }
     }
 
@@ -73,19 +80,22 @@ class ReportScheduler(
     }
 
     private fun msUntilNextDaily(): Long {
-        val now = LocalDateTime.now()
+        val now = ZonedDateTime.now(zone)
         val targetTime = LocalTime.parse(config.dailyTime, timeFormatter)
-        var next = now.toLocalDate().atTime(targetTime)
+        var next = now.toLocalDate().atTime(targetTime).atZone(zone)
         if (now >= next) next = next.plusDays(1)
         return Duration.between(now, next).toMillis().coerceAtLeast(1000)
     }
 
     private fun msUntilNextWeekly(): Long {
-        val now = LocalDateTime.now()
+        val now = ZonedDateTime.now(zone)
         val targetDay = parseDayOfWeek(config.weeklyDay)
         val targetTime = LocalTime.parse(config.weeklyTime, timeFormatter)
-        var next = now.toLocalDate().with(java.time.temporal.TemporalAdjusters.nextOrSame(targetDay)).atTime(targetTime)
-        if (now >= next) next = next.with(java.time.temporal.TemporalAdjusters.next(targetDay))
+        var next = now.toLocalDate()
+            .with(TemporalAdjusters.nextOrSame(targetDay))
+            .atTime(targetTime)
+            .atZone(zone)
+        if (now >= next) next = next.with(TemporalAdjusters.next(targetDay))
         return Duration.between(now, next).toMillis().coerceAtLeast(1000)
     }
 
