@@ -1,18 +1,12 @@
--- =============================================================================
--- V15: Реальный справочник сотрудников (103 чел., 16 отделов)
--- Источник: Справочник сотруд.2026.xlsx
--- =============================================================================
-
+-- V15: Real employee directory (103 employees, 16 departments)
 SET search_path = tenant_dev_clinic, public;
 
--- ── 1. Удаляем старые тестовые данные ──────────────────────────────────────
 UPDATE calls SET manager_id = NULL WHERE manager_id IS NOT NULL;
 DELETE FROM managers;
 DELETE FROM department_leads;
 DELETE FROM departments;
-DELETE FROM public.users WHERE tenant_id = '00000000-0000-0000-0000-000000000001' AND role = 'MANAGER';
+DELETE FROM public.users WHERE tenant_id = '00000000-0000-0000-0000-000000000001' AND role IN ('MANAGER','CLIENT_ADMIN','TEAM_LEAD');
 
--- ── 2. Отделы (16) ────────────────────────────────────────────────────────
 INSERT INTO departments (id, name, description, created_at) VALUES
     ('45e57a87-5682-547e-b05e-d16cd8bf7a99', 'Бухгалтерия', NULL, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('7135d203-737f-56c3-b10f-a94d081f93a7', 'Орган инспекции №1', NULL, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
@@ -31,8 +25,6 @@ INSERT INTO departments (id, name, description, created_at) VALUES
     ('dc21ff6e-4c60-589f-87a6-2294c1c3cf5a', 'Лаборатория Группа выездных работ', NULL, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('8b9152a1-113e-51b2-a795-f2d0361a2aba', 'Транспортный отдел', NULL, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000);
 
--- ── 3. Пользователи ───────────────────────────────────────────────────────
--- Маликов М.А. и Мясникова Т.В. → CLIENT_ADMIN, остальные → MANAGER
 INSERT INTO public.users (id, tenant_id, email, password_hash, full_name, role, created_at, updated_at) VALUES
     ('468cabd3-231a-5f75-9161-188d2d50d636', '00000000-0000-0000-0000-000000000001', 'malikov.m@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Маликов Максим Анатольевич', 'CLIENT_ADMIN', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('5cf531e5-b74f-5702-adf5-5708d436bb47', '00000000-0000-0000-0000-000000000001', 'myasnikova.t@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Мясникова Татьяна Викторовна', 'CLIENT_ADMIN', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
@@ -133,12 +125,11 @@ INSERT INTO public.users (id, tenant_id, email, password_hash, full_name, role, 
     ('9e23dc3e-3b6f-529d-8b75-b21112d4d670', '00000000-0000-0000-0000-000000000001', 'vyatkin.a@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Вяткин Артем Николаевич', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('2bac1bb0-9af8-540c-8c33-90cce7d92cf9', '00000000-0000-0000-0000-000000000001', 'nazarenko.e@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Назаренко Елизавета Петровна', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('b37cafeb-e266-5526-849c-c11b8f64abdf', '00000000-0000-0000-0000-000000000001', 'semiguzov.n@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Семигузов Назар Денисович', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
-    ('fd10fa4e-3e78-5141-927a-9cb040985879', '00000000-0000-0000-0000-000000000001', 'rubtsov.m2@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Рубцов Михаил Дмитриевич', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
+    ('fd10fa4e-3e78-5141-927a-9cb040985879', '00000000-0000-0000-0000-000000000001', 'rubtsov.md@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Рубцов Михаил Дмитриевич', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('34c6e7df-c290-5f55-9730-c3a13b0f971c', '00000000-0000-0000-0000-000000000001', 'polyvyannyy.a@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Полывянный Александр Максимович', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('cebe6e2e-21f1-5e35-b0db-3789cf053db1', '00000000-0000-0000-0000-000000000001', 'konstantinov.a@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Константинов Андрей Владимирович', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('d7a33270-3afe-5513-9296-87dafea98743', '00000000-0000-0000-0000-000000000001', 'ustyugova.z@malikov.ru', '$2a$12$xZABa2FS44DMwAWuyuvQZuL0h7ycFzXtAFaVbgD9UrOdeTDHkN09S', 'Устюгова Зоя Викторовна', 'MANAGER', EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000);
 
--- ── 4. Менеджеры (extension + department) ─────────────────────────────────
 INSERT INTO managers (id, user_id, department_id, extension, is_active, created_at, updated_at) VALUES
     ('0a3b8dde-8e37-5960-a63b-a3eda51c2ad6', '468cabd3-231a-5f75-9161-188d2d50d636', NULL, '1630', TRUE, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
     ('b94d5123-672f-5b4d-befd-6353cbe2905c', '5cf531e5-b74f-5702-adf5-5708d436bb47', NULL, '1631', TRUE, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000, EXTRACT(EPOCH FROM NOW())::BIGINT * 1000),
