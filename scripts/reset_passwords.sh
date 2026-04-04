@@ -7,23 +7,15 @@ DB_NAME="${DB_NAME:-malikov}"
 PY_CONTAINER="${PY_CONTAINER:-malikov_pipeline}"
 OUTPUT_FILE="/opt/malikov/credentials.txt"
 
-psql_cmd() {
-  docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc "$1"
-}
-
-bcrypt_hash() {
-  docker exec "$PY_CONTAINER" python3 -c "
-import bcrypt
-h = bcrypt.hashpw(b'$1', bcrypt.gensalt(12)).decode().replace('\$2b\$', '\$2a\$')
-print(h)
-"
+psql_run() {
+  docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tA
 }
 
 echo "Installing bcrypt in pipeline container..."
 docker exec "$PY_CONTAINER" uv pip install bcrypt --quiet 2>/dev/null \
   || docker exec "$PY_CONTAINER" pip3 install bcrypt --quiet 2>/dev/null
 
-emails=$(psql_cmd "SELECT email FROM public.users WHERE role = 'MANAGER' ORDER BY full_name;")
+emails=$(echo "SELECT email FROM public.users WHERE role = 'MANAGER' ORDER BY full_name;" | psql_run)
 
 if [ -z "$emails" ]; then
   echo "No MANAGER users found."
@@ -37,8 +29,14 @@ count=0
 while IFS= read -r email; do
   [ -z "$email" ] && continue
   password=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9' | head -c 12)
-  hash=$(bcrypt_hash "$password")
-  psql_cmd "UPDATE public.users SET password_hash = '${hash}' WHERE email = '${email}';" >/dev/null
+
+  hash=$(docker exec "$PY_CONTAINER" python3 -c "
+import bcrypt,sys
+h=bcrypt.hashpw(sys.argv[1].encode(),bcrypt.gensalt(12)).decode().replace('\$2b\$','\$2a\$')
+print(h)" "$password")
+
+  echo "UPDATE public.users SET password_hash = '${hash}' WHERE email = '${email}';" | psql_run >/dev/null
+
   echo "${email}  ${password}" >> "$OUTPUT_FILE"
   count=$((count + 1))
   printf "\r  [%d] %s" "$count" "$email"
