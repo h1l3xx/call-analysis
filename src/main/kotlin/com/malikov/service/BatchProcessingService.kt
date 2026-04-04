@@ -115,9 +115,9 @@ class BatchProcessingService(
         return try {
             resultWriter.markProcessing(schema, callId)
 
-            val response = AppMetrics.transcriptionTimer.recordCallable {
-                pipelineClient.analyze(audioFile, criteria = null)
-            }!!
+            val start = System.nanoTime()
+            val response = pipelineClient.analyze(audioFile, criteria = null)
+            AppMetrics.transcriptionTimer.record(System.nanoTime() - start, java.util.concurrent.TimeUnit.NANOSECONDS)
 
             resultWriter.saveTranscriptionOnly(schema, callId, response)
             batchRepo.incrementProcessed(schema, batchId)
