@@ -20,6 +20,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.pipeline_service import CallAnalysisPipeline
 from src.utils import ConfigManager, setup_logging
@@ -180,6 +181,12 @@ def create_app(
             await file.close()
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    Instrumentator(
+        should_group_status_codes=True,
+        should_group_untemplated=True,
+        excluded_handlers=["/healthz", "/metrics"],
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
     return app
 

@@ -1,5 +1,6 @@
 package com.malikov.service
 
+import com.malikov.config.AppMetrics
 import com.malikov.db.*
 import com.malikov.pipeline.PipelineClient
 import com.malikov.pipeline.PipelineCriterionInput
@@ -56,6 +57,7 @@ class BatchProcessingService(
                 batchSummaryService.generateBatchSummary(schema, batchId)
 
                 batchRepo.updateStatus(schema, batchId, "done")
+                AppMetrics.batchesCompleted.increment()
                 log.info("Batch {} fully processed", batchId)
 
                 try {
@@ -65,6 +67,7 @@ class BatchProcessingService(
                 }
             } catch (e: Exception) {
                 log.error("Batch {} processing failed", batchId, e)
+                AppMetrics.batchesFailed.increment()
                 batchRepo.updateStatus(schema, batchId, "failed")
             }
         }
@@ -112,11 +115,13 @@ class BatchProcessingService(
         return try {
             resultWriter.markProcessing(schema, callId)
 
-            // Pipeline call WITHOUT criteria = transcription only (quality field will be null)
-            val response = pipelineClient.analyze(audioFile, criteria = null)
+            val response = AppMetrics.transcriptionTimer.recordCallable {
+                pipelineClient.analyze(audioFile, criteria = null)
+            }!!
 
             resultWriter.saveTranscriptionOnly(schema, callId, response)
             batchRepo.incrementProcessed(schema, batchId)
+            AppMetrics.callsProcessed.increment()
 
             log.info("Call {} transcribed (result_id={})", callId, response.resultId)
             callId
@@ -124,11 +129,13 @@ class BatchProcessingService(
             log.error("Transcription failed for call {}: [{}] {}", callId, e.statusCode, e.detail)
             resultWriter.markFailed(schema, callId, "transcription", "Pipeline [${e.statusCode}]: ${e.detail}")
             batchRepo.incrementProcessed(schema, batchId)
+            AppMetrics.callsFailed.increment()
             null
         } catch (e: Exception) {
             log.error("Transcription error for call {}", callId, e)
             resultWriter.markFailed(schema, callId, "transcription", e.message ?: "Unknown error")
             batchRepo.incrementProcessed(schema, batchId)
+            AppMetrics.callsFailed.increment()
             null
         } finally {
             try { if (audioFile.exists()) audioFile.delete() } catch (_: Exception) {}
@@ -174,18 +181,21 @@ class BatchProcessingService(
 
             markAnalyzing(schema, callId)
 
-            when {
-                callType == "internal" -> {
-                    internalCallEvaluator.evaluate(schema, callId, transcription)
+            AppMetrics.llmEvaluationTimer.record(Runnable {
+                when {
+                    callType == "internal" -> {
+                        AppMetrics.callsInternal.increment()
+                        internalCallEvaluator.evaluate(schema, callId, transcription)
+                    }
+                    callType == "external" -> {
+                        AppMetrics.callsExternal.increment()
+                        evaluateExternalCall(schema, callId, transcription)
+                    }
+                    else -> {
+                        evaluateExternalCall(schema, callId, transcription)
+                    }
                 }
-                callType == "external" -> {
-                    evaluateExternalCall(schema, callId, transcription)
-                }
-                else -> {
-                    // Unknown type: try external evaluation with default script
-                    evaluateExternalCall(schema, callId, transcription)
-                }
-            }
+            })
 
             markDone(schema, callId)
         } catch (e: Exception) {

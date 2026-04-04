@@ -36,6 +36,10 @@ dependencies {
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-server-rate-limit:$ktorVersion")
+    implementation("io.ktor:ktor-server-metrics-micrometer:$ktorVersion")
+
+    // Micrometer Prometheus
+    implementation("io.micrometer:micrometer-registry-prometheus:1.13.1")
 
     // Ktor client (для вызова Python pipeline)
     implementation("io.ktor:ktor-client-core:$ktorVersion")

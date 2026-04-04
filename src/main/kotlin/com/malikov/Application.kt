@@ -3,6 +3,7 @@ package com.malikov
 import com.malikov.config.AppConfig
 import com.malikov.config.ServiceRegistry
 import com.malikov.config.configureDatabase
+import com.malikov.config.configureMetrics
 import com.malikov.config.configurePlugins
 import com.malikov.routing.configureRouting
 import io.ktor.server.application.*
@@ -26,6 +27,7 @@ fun Application.module() {
 
     configureDatabase(config)
     configurePlugins(config)
+    configureMetrics()
     configureRouting(config, services)
 
     logger.info { "Malikov Backend started [env=${config.environment}]" }

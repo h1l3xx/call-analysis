@@ -2,6 +2,7 @@ package com.malikov.routing
 
 import com.malikov.auth.UserPrincipal
 import com.malikov.config.AppConfig
+import com.malikov.config.AppMetrics
 import com.malikov.config.ServiceRegistry
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -19,6 +20,10 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
     services.startBackgroundServices()
 
     routing {
+
+        get("/metrics") {
+            call.respond(AppMetrics.registry.scrape())
+        }
 
         get("/health") {
             val pipelineOk = services.pipelineService.isAvailable()
