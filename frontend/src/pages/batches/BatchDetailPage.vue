@@ -8,7 +8,7 @@ import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
 
 const route = useRoute()
-const { formatDate, formatDuration } = useFormatters()
+const { formatDate, formatDuration, participantLabel } = useFormatters()
 
 const batch = ref<BatchResponse | null>(null)
 const summaries = ref<BatchSummaryResponse[]>([])
@@ -128,11 +128,6 @@ function callTypeBadgeClass(ct: string | null): string {
   if (ct === 'internal') return 'bg-blue-100 text-blue-700'
   if (ct === 'external') return 'bg-purple-100 text-purple-700'
   return 'bg-gray-100 text-gray-600'
-}
-
-function participantLabel(name: string | null, names: string[] | null): string {
-  if (names && names.length > 1) return names.join(' / ')
-  return name || '—'
 }
 
 function parseSummaryContent(content: string | null): Record<string, any> | null {

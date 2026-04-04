@@ -27,5 +27,17 @@ export function useFormatters() {
     return `${(ratio * 100).toFixed(0)}%`
   }
 
-  return { formatDate, formatDuration, formatScore, formatPercent }
+  function shortName(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/)
+    if (parts.length >= 3) return `${parts[0]} ${parts[1][0]}.${parts[2][0]}.`
+    if (parts.length === 2) return `${parts[0]} ${parts[1][0]}.`
+    return fullName
+  }
+
+  function participantLabel(name: string | null, names: string[] | null | undefined): string {
+    if (names && names.length > 1) return names.map(shortName).join(' / ')
+    return name || '—'
+  }
+
+  return { formatDate, formatDuration, formatScore, formatPercent, shortName, participantLabel }
 }

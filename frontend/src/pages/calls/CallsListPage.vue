@@ -11,7 +11,7 @@ import CallUploadModal from '@/components/calls/CallUploadModal.vue'
 import BulkUploadModal from '@/components/calls/BulkUploadModal.vue'
 
 const auth = useAuthStore()
-const { formatDate, formatDuration } = useFormatters()
+const { formatDate, formatDuration, participantLabel } = useFormatters()
 
 const calls = ref<CallResponse[]>([])
 const loading = ref(true)
@@ -31,11 +31,6 @@ const statusOptions = [
   { value: 'done', label: 'Готово' },
   { value: 'failed', label: 'Ошибка' },
 ]
-
-function participantLabel(name: string | null, names: string[] | null | undefined): string {
-  if (names && names.length > 1) return names.join(' / ')
-  return name || '—'
-}
 
 function callTypeLabel(ct: string | null): string {
   if (ct === 'internal') return 'Вн'

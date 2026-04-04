@@ -12,7 +12,7 @@ import SpeakerMetricsChart from '@/components/calls/SpeakerMetricsChart.vue'
 import QualityScoreCard from '@/components/calls/QualityScoreCard.vue'
 
 const route = useRoute()
-const { formatDate, formatDuration } = useFormatters()
+const { formatDate, formatDuration, participantLabel } = useFormatters()
 
 const call = ref<CallDetailResponse | null>(null)
 const result = ref<CallResultResponse | null>(null)
@@ -64,11 +64,6 @@ onMounted(async () => {
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })
-
-function participantLabel(name: string | null, names: string[] | null | undefined): string {
-  if (names && names.length > 1) return names.join(' / ')
-  return name || '—'
-}
 
 const tabs = [
   { key: 'transcription', label: 'Транскрипция' },
