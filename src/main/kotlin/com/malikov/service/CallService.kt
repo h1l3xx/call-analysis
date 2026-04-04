@@ -140,10 +140,10 @@ class CallService(
             val candidates = PhoneParser.extractManagerIdentifiers(filename)
             val match = managerRepo.findFirstByIdentifiers(schema, candidates)
 
-            val secondMgr = if (ct == CallType.INTERNAL) {
+            val secondMgr = if (ct == CallType.INTERNAL && match?.second != null) {
                 val allExts = PhoneParser.extractAllPbxExtensions(filename)
                 val allMgrs = managerRepo.findAllByExtensions(schema, allExts)
-                allMgrs.firstOrNull { it.id != match?.second?.id }
+                allMgrs.firstOrNull { it.extension != match.second.extension }
             } else null
 
             val dedupKey = PhoneParser.extractInternalCallKey(filename)
@@ -264,7 +264,11 @@ class CallService(
             val allExts = PhoneParser.extractAllPbxExtensions(filename)
             if (allExts.size < 2) return@map row
             val allMgrs = managerRepo.findAllByExtensions(schema, allExts)
-            val second = allMgrs.firstOrNull { it.id != row.managerId }
+            val primaryMgr = allMgrs.firstOrNull { it.id == row.managerId }
+            val second = if (primaryMgr?.extension != null)
+                allMgrs.firstOrNull { it.extension != primaryMgr.extension }
+            else
+                allMgrs.firstOrNull { it.id != row.managerId }
             if (second != null) row.copy(secondManagerId = second.id, secondManagerName = second.fullName)
             else row
         }
