@@ -12,6 +12,10 @@ export interface CallResponse {
   id: string
   managerId: string | null
   managerName: string | null
+  secondManagerId: string | null
+  secondManagerName: string | null
+  participantNames: string[] | null
+  secondParticipantNames: string[] | null
   scriptId: string | null
   scriptName: string | null
   status: CallStatus
@@ -27,6 +31,10 @@ export interface CallDetailResponse {
   id: string
   managerId: string | null
   managerName: string | null
+  secondManagerId: string | null
+  secondManagerName: string | null
+  participantNames: string[] | null
+  secondParticipantNames: string[] | null
   scriptId: string | null
   scriptName: string | null
   status: CallStatus

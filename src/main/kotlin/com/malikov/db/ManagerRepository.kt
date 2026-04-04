@@ -86,6 +86,18 @@ class ManagerRepository {
             ?.toManagerRow(m, d)
     }
 
+    /** Все менеджеры, чей extension входит в список. Для внутренних звонков — оба участника. */
+    fun findAllByExtensions(schema: String, extensions: List<String>): List<ManagerRow> = transaction {
+        val m = TManagers(schema)
+        val d = TDepartments(schema)
+        if (extensions.isEmpty()) return@transaction emptyList()
+        m.join(d, JoinType.LEFT, m.departmentId, d.id)
+            .join(Users, JoinType.INNER, m.userId, Users.id)
+            .selectAll()
+            .where { m.extension inList extensions }
+            .map { it.toManagerRow(m, d) }
+    }
+
     /** Первый найденный менеджер по списку кандидатов (порядок важен для внутренних звонков). */
     fun findFirstByIdentifiers(schema: String, candidates: List<String>): Pair<String, ManagerRow>? =
         transaction {
@@ -106,6 +118,35 @@ class ManagerRepository {
             }
             null
         }
+
+    /**
+     * For a batch of manager IDs, returns a mapping: managerId → list of ALL full names
+     * that share the same extension. Only entries with >1 name are included (shared extensions).
+     */
+    fun findSharedExtensionNames(schema: String, managerIds: List<UUID>): Map<UUID, List<String>> = transaction {
+        if (managerIds.isEmpty()) return@transaction emptyMap()
+        val m = TManagers(schema)
+
+        val extensionById = m.select(m.id, m.extension)
+            .where { m.id inList managerIds }
+            .associate { it[m.id] to it[m.extension] }
+
+        val extensions = extensionById.values.filterNotNull().distinct()
+        if (extensions.isEmpty()) return@transaction emptyMap()
+
+        val namesByExt: Map<String, List<String>> = m
+            .join(Users, JoinType.INNER, m.userId, Users.id)
+            .select(m.extension, Users.fullName)
+            .where { m.extension inList extensions }
+            .groupBy({ it[m.extension]!! }) { it[Users.fullName] }
+
+        val result = mutableMapOf<UUID, List<String>>()
+        for ((mgrId, ext) in extensionById) {
+            val names = ext?.let { namesByExt[it] } ?: continue
+            if (names.size > 1) result[mgrId] = names
+        }
+        result
+    }
 
     private fun ResultRow.toManagerRow(m: TManagers, d: TDepartments) = ManagerRow(
         id             = this[m.id],

@@ -3,6 +3,8 @@ package com.malikov.routing
 import com.malikov.auth.Role
 import com.malikov.config.NotFoundException
 import com.malikov.db.BatchRepository
+import com.malikov.db.CallRepository
+import com.malikov.db.ManagerRepository
 import com.malikov.dto.*
 import com.malikov.service.BatchExportService
 import com.malikov.service.BatchSummaryService
@@ -16,6 +18,8 @@ import java.util.UUID
 
 fun Route.batchRoutes(
     batchRepo: BatchRepository,
+    callRepo: CallRepository,
+    managerRepo: ManagerRepository,
     batchSummaryService: BatchSummaryService,
     batchExportService: BatchExportService,
 ) {
@@ -60,11 +64,23 @@ fun Route.batchRoutes(
             val (items, total) = batchRepo.listCallsByBatch(
                 p.schema!!, batchId, callType, params.offset, params.pageSize
             )
+            val secondIds = items.mapNotNull { it.secondManagerId }
+            val secondNames = if (secondIds.isNotEmpty())
+                callRepo.resolveManagerNames(p.schema!!, secondIds) else emptyMap()
+
+            val allMgrIds = (items.mapNotNull { it.managerId } + items.mapNotNull { it.secondManagerId }).distinct()
+            val sharedMap = if (allMgrIds.isNotEmpty())
+                managerRepo.findSharedExtensionNames(p.schema!!, allMgrIds) else emptyMap()
+
             val response = items.map {
                 CallResponse(
                     id = it.id.toString(),
                     managerId = it.managerId?.toString(),
                     managerName = it.managerName,
+                    secondManagerId = it.secondManagerId?.toString(),
+                    secondManagerName = it.secondManagerId?.let { id -> secondNames[id] },
+                    participantNames = it.managerId?.let { id -> sharedMap[id] },
+                    secondParticipantNames = it.secondManagerId?.let { id -> sharedMap[id] },
                     scriptId = it.scriptId?.toString(),
                     scriptName = it.scriptName,
                     status = it.status,

@@ -87,6 +87,7 @@ class TCriteria(schema: String) : Table("$schema.criteria") {
 class TCalls(schema: String) : Table("$schema.calls") {
     val id              = uuid("id").autoGenerate()
     val managerId       = uuid("manager_id").nullable()
+    val secondManagerId = uuid("second_manager_id").nullable()
     val scriptId        = uuid("script_id").nullable()
     val batchId         = uuid("batch_id").nullable()
     val callType        = text("call_type").nullable()

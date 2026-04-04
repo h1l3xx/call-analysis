@@ -27,12 +27,17 @@ class CallService(
         managerId: UUID? = null,
     ): PaginatedResponse<CallResponse> {
         val (rows, total) = callRepo.list(schema, params.offset, params.pageSize, status, managerId)
-        return paginated(rows.map { it.toResponse() }, total, params)
+        val enriched = enrichSecondManagerNames(schema, rows)
+        val shared = resolveSharedExtensions(schema, enriched)
+        return paginated(enriched.mapIndexed { i, row -> row.toResponse(shared[i]) }, total, params)
     }
 
-    fun getById(schema: String, callId: UUID): CallDetailResponse =
-        callRepo.findById(schema, callId)?.toDetailResponse()
-            ?: throw NotFoundException("Call not found")
+    fun getById(schema: String, callId: UUID): CallDetailResponse {
+        val row = callRepo.findById(schema, callId) ?: throw NotFoundException("Call not found")
+        val enriched = enrichSecondManagerNames(schema, listOf(row)).first()
+        val shared = resolveSharedExtensions(schema, listOf(enriched))
+        return enriched.toDetailResponse(shared[0])
+    }
 
     fun create(schema: String, request: CreateCallRequest): CallResponse {
         val managerId = UUID.fromString(request.managerId)
@@ -114,13 +119,14 @@ class CallService(
         schema: String,
         files: List<Pair<File, String>>,
     ): BulkUploadResponse {
-        val stats = CallTypeStatsJson()
         var intCount = 0; var extInCount = 0; var extOutCount = 0; var unkCount = 0
 
         data class ParsedFile(
             val audioFile: File, val filename: String,
             val callType: CallType, val callTypeStr: String,
             val matchedId: String?, val manager: ManagerRow?,
+            val secondManager: ManagerRow?,
+            val dedupKey: String?,
         )
 
         val parsed = files.map { (audioFile, filename) ->
@@ -133,17 +139,50 @@ class CallService(
             }
             val candidates = PhoneParser.extractManagerIdentifiers(filename)
             val match = managerRepo.findFirstByIdentifiers(schema, candidates)
-            ParsedFile(audioFile, filename, ct, ctStr, match?.first, match?.second)
+
+            val secondMgr = if (ct == CallType.INTERNAL) {
+                val allExts = PhoneParser.extractAllPbxExtensions(filename)
+                val allMgrs = managerRepo.findAllByExtensions(schema, allExts)
+                allMgrs.firstOrNull { it.id != match?.second?.id }
+            } else null
+
+            val dedupKey = PhoneParser.extractInternalCallKey(filename)
+
+            ParsedFile(audioFile, filename, ct, ctStr, match?.first, match?.second, secondMgr, dedupKey)
         }
 
+        val seenInternalKeys = mutableSetOf<String>()
+        val deduped = mutableListOf<ParsedFile>()
+        val skippedDupes = mutableListOf<ParsedFile>()
+
+        for (p in parsed) {
+            if (p.dedupKey != null && !seenInternalKeys.add(p.dedupKey)) {
+                skippedDupes.add(p)
+                intCount--
+            } else {
+                deduped.add(p)
+            }
+        }
+
+        val actualTotal = deduped.size
         val typeStats = CallTypeStatsJson(intCount, extInCount, extOutCount, unkCount)
-        val batchId = batchRepo.create(schema, files.size, typeStats)
+        val batchId = batchRepo.create(schema, actualTotal, typeStats)
 
         val results = mutableListOf<BulkUploadItemResult>()
         var queued = 0; var failed = 0
         val queuedCallIds = mutableListOf<UUID>()
+        val queuedFiles = mutableListOf<File>()
 
-        for (p in parsed) {
+        for (dup in skippedDupes) {
+            results.add(BulkUploadItemResult(
+                filename = dup.filename, status = "skipped",
+                phone = dup.matchedId, callType = dup.callTypeStr,
+                error = "Дубликат внутреннего звонка (запись с другого аппарата)",
+            ))
+            dup.audioFile.delete()
+        }
+
+        for (p in deduped) {
             if (p.manager == null) {
                 failed++
                 val candidates = PhoneParser.extractManagerIdentifiers(p.filename)
@@ -164,6 +203,7 @@ class CallService(
                     source = "bulk_upload", audioS3Key = null,
                     audioFilename = p.filename, batchId = batchId,
                     callType = p.callTypeStr,
+                    secondManagerId = p.secondManager?.id,
                 )
 
                 val ext = p.filename.substringAfterLast('.', "wav").lowercase()
@@ -173,6 +213,7 @@ class CallService(
                 } catch (_: Exception) { /* non-critical */ }
 
                 queuedCallIds.add(callId)
+                queuedFiles.add(p.audioFile)
                 queued++
                 results.add(BulkUploadItemResult(
                     filename = p.filename, status = "queued",
@@ -194,7 +235,7 @@ class CallService(
 
         batchProcessingService.startBatchProcessing(
             schema = schema, batchId = batchId,
-            callFiles = queuedCallIds.zip(parsed.filter { it.manager != null }.map { it.audioFile }),
+            callFiles = queuedCallIds.zip(queuedFiles),
         )
 
         return BulkUploadResponse(
@@ -212,38 +253,78 @@ class CallService(
     fun getManagerIdByUserId(schema: String, userId: UUID): UUID? =
         managerRepo.findByUserId(schema, userId)?.id
 
-    private fun CallRow.toResponse() = CallResponse(
-        id              = id.toString(),
-        managerId       = managerId?.toString(),
-        managerName     = managerName,
-        scriptId        = scriptId?.toString(),
-        scriptName      = scriptName,
-        status          = status,
-        source          = source,
-        callType        = callType,
-        batchId         = batchId?.toString(),
-        durationSeconds = durationSeconds,
-        createdAt       = createdAt,
-        finishedAt      = finishedAt,
+    private fun enrichSecondManagerNames(schema: String, rows: List<CallRow>): List<CallRow> {
+        val ids = rows.mapNotNull { it.secondManagerId }.distinct()
+        if (ids.isEmpty()) return rows
+        val names = callRepo.resolveManagerNames(schema, ids)
+        return rows.map { row ->
+            if (row.secondManagerId != null)
+                row.copy(secondManagerName = names[row.secondManagerId])
+            else row
+        }
+    }
+
+    data class SharedInfo(
+        val participantNames: List<String>?,
+        val secondParticipantNames: List<String>?,
     )
 
-    private fun CallRow.toDetailResponse() = CallDetailResponse(
-        id              = id.toString(),
-        managerId       = managerId?.toString(),
-        managerName     = managerName,
-        scriptId        = scriptId?.toString(),
-        scriptName      = scriptName,
-        status          = status,
-        source          = source,
-        callType        = callType,
-        batchId         = batchId?.toString(),
-        audioS3Key      = audioS3Key,
-        audioFilename   = audioFilename,
-        durationSeconds = durationSeconds,
-        failedStep      = failedStep,
-        errorMessage    = errorMessage,
-        createdAt       = createdAt,
-        finishedAt      = finishedAt,
+    /**
+     * For each call, checks if its manager(s) share extensions with other employees.
+     * Returns a list parallel to [rows] with non-null participantNames when the extension is shared.
+     */
+    private fun resolveSharedExtensions(schema: String, rows: List<CallRow>): List<SharedInfo> {
+        val allMgrIds = (rows.mapNotNull { it.managerId } + rows.mapNotNull { it.secondManagerId }).distinct()
+        if (allMgrIds.isEmpty()) return rows.map { SharedInfo(null, null) }
+        val sharedMap = managerRepo.findSharedExtensionNames(schema, allMgrIds)
+        return rows.map { row ->
+            SharedInfo(
+                participantNames = row.managerId?.let { sharedMap[it] },
+                secondParticipantNames = row.secondManagerId?.let { sharedMap[it] },
+            )
+        }
+    }
+
+    private fun CallRow.toResponse(shared: SharedInfo = SharedInfo(null, null)) = CallResponse(
+        id                     = id.toString(),
+        managerId              = managerId?.toString(),
+        managerName            = managerName,
+        secondManagerId        = secondManagerId?.toString(),
+        secondManagerName      = secondManagerName,
+        participantNames       = shared.participantNames,
+        secondParticipantNames = shared.secondParticipantNames,
+        scriptId               = scriptId?.toString(),
+        scriptName             = scriptName,
+        status                 = status,
+        source                 = source,
+        callType               = callType,
+        batchId                = batchId?.toString(),
+        durationSeconds        = durationSeconds,
+        createdAt              = createdAt,
+        finishedAt             = finishedAt,
+    )
+
+    private fun CallRow.toDetailResponse(shared: SharedInfo = SharedInfo(null, null)) = CallDetailResponse(
+        id                     = id.toString(),
+        managerId              = managerId?.toString(),
+        managerName            = managerName,
+        secondManagerId        = secondManagerId?.toString(),
+        secondManagerName      = secondManagerName,
+        participantNames       = shared.participantNames,
+        secondParticipantNames = shared.secondParticipantNames,
+        scriptId               = scriptId?.toString(),
+        scriptName             = scriptName,
+        status                 = status,
+        source                 = source,
+        callType               = callType,
+        batchId                = batchId?.toString(),
+        audioS3Key             = audioS3Key,
+        audioFilename          = audioFilename,
+        durationSeconds        = durationSeconds,
+        failedStep             = failedStep,
+        errorMessage           = errorMessage,
+        createdAt              = createdAt,
+        finishedAt             = finishedAt,
     )
 
     private val jsonParser = Json { ignoreUnknownKeys = true }

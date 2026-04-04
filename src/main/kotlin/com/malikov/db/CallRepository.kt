@@ -8,6 +8,8 @@ data class CallRow(
     val id: UUID,
     val managerId: UUID?,
     val managerName: String?,
+    val secondManagerId: UUID?,
+    val secondManagerName: String?,
     val scriptId: UUID?,
     val scriptName: String?,
     val status: String,
@@ -133,10 +135,12 @@ class CallRepository {
         audioFilename: String?,
         batchId: UUID? = null,
         callType: String? = null,
+        secondManagerId: UUID? = null,
     ): UUID = transaction {
         val cl = TCalls(schema)
         cl.insert {
             it[cl.managerId]     = managerId
+            if (secondManagerId != null) it[cl.secondManagerId] = secondManagerId
             if (scriptId != null) it[cl.scriptId] = scriptId
             it[cl.callSource]    = source
             it[cl.audioS3Key]    = audioS3Key
@@ -311,22 +315,33 @@ class CallRepository {
         CallResultRow(callRow, transcription, speakerMetrics, qualityScore, errors)
     }
 
+    fun resolveManagerNames(schema: String, managerIds: List<UUID>): Map<UUID, String> = transaction {
+        if (managerIds.isEmpty()) return@transaction emptyMap()
+        val m = TManagers(schema)
+        m.join(Users, JoinType.INNER, m.userId, Users.id)
+            .selectAll()
+            .where { m.id inList managerIds }
+            .associate { it[m.id] to it[Users.fullName] }
+    }
+
     private fun ResultRow.toCallRow(cl: TCalls, m: TManagers, s: TScripts) = CallRow(
-        id              = this[cl.id],
-        managerId       = this[cl.managerId],
-        managerName     = this.getOrNull(Users.fullName),
-        scriptId        = this[cl.scriptId],
-        scriptName      = this.getOrNull(s.name),
-        status          = this[cl.status],
-        source          = this[cl.callSource],
-        batchId         = this[cl.batchId],
-        callType        = this[cl.callType],
-        audioS3Key      = this[cl.audioS3Key],
-        audioFilename   = this[cl.audioFilename],
-        durationSeconds = this[cl.durationSeconds],
-        failedStep      = this[cl.failedStep],
-        errorMessage    = this[cl.errorMessage],
-        createdAt       = this[cl.createdAt],
-        finishedAt      = this[cl.finishedAt],
+        id                = this[cl.id],
+        managerId         = this[cl.managerId],
+        managerName       = this.getOrNull(Users.fullName),
+        secondManagerId   = this[cl.secondManagerId],
+        secondManagerName = null,
+        scriptId          = this[cl.scriptId],
+        scriptName        = this.getOrNull(s.name),
+        status            = this[cl.status],
+        source            = this[cl.callSource],
+        batchId           = this[cl.batchId],
+        callType          = this[cl.callType],
+        audioS3Key        = this[cl.audioS3Key],
+        audioFilename     = this[cl.audioFilename],
+        durationSeconds   = this[cl.durationSeconds],
+        failedStep        = this[cl.failedStep],
+        errorMessage      = this[cl.errorMessage],
+        createdAt         = this[cl.createdAt],
+        finishedAt        = this[cl.finishedAt],
     )
 }

@@ -24,6 +24,7 @@ object PhoneParser {
     private val PBX_EXT_IN_PARENS = Regex("""(\d{3,5})\s*\(\d{2,}\)""")
     private val MANAGER_AFTER_COMMA = Regex(""",\s*(\d{3,5})\s*\(""")
     private val GENERIC_PHONE_CHUNK = Regex("""\+?[\d\-\s()]{7,}""")
+    private val TIMESTAMP_PREFIX = Regex("""\d{2}\.\d{2}\.\d{4}_\d{2}-\d{2}-\d{2}""")
 
     fun detectCallType(filename: String): CallType {
         val nameOnly = filename.substringBeforeLast('.')
@@ -72,6 +73,31 @@ object PhoneParser {
         }
 
         return ordered.toList()
+    }
+
+    /**
+     * Для внутренних звонков возвращает ключ дедупликации: "timestamp_ext1_ext2"
+     * (номера отсортированы). Два файла одного разговора дадут одинаковый ключ.
+     * Для не-internal возвращает null.
+     */
+    fun extractInternalCallKey(filename: String): String? {
+        val nameOnly = filename.substringBeforeLast('.')
+        if (detectCallType(filename) != CallType.INTERNAL) return null
+        val extensions = PBX_EXT_IN_PARENS.findAll(nameOnly)
+            .map { it.groupValues[1] }
+            .toList()
+            .sorted()
+        if (extensions.size < 2) return null
+        val ts = TIMESTAMP_PREFIX.find(nameOnly)?.value ?: nameOnly.take(19)
+        return "${ts}_${extensions.joinToString("_")}"
+    }
+
+    /**
+     * Извлекает все внутренние номера (с PBX) из имени файла.
+     */
+    fun extractAllPbxExtensions(filename: String): List<String> {
+        val nameOnly = filename.substringBeforeLast('.')
+        return PBX_EXT_IN_PARENS.findAll(nameOnly).map { it.groupValues[1] }.toList()
     }
 
     /** @deprecated Используйте [extractManagerIdentifiers]; оставлено для обратной совместимости. */

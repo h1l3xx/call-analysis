@@ -32,6 +32,11 @@ const statusOptions = [
   { value: 'failed', label: 'Ошибка' },
 ]
 
+function participantLabel(name: string | null, names: string[] | null | undefined): string {
+  if (names && names.length > 1) return names.join(' / ')
+  return name || '—'
+}
+
 function callTypeLabel(ct: string | null): string {
   if (ct === 'internal') return 'Вн'
   if (ct === 'external') return 'Вш'
@@ -108,7 +113,7 @@ function handleUploaded() {
       <table v-else class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="text-left px-5 py-3 font-medium text-gray-600">Менеджер</th>
+            <th class="text-left px-5 py-3 font-medium text-gray-600">Участники</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Тип</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Скрипт</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Статус</th>
@@ -128,7 +133,18 @@ function handleUploaded() {
             v-slot="{ navigate }"
           >
             <tr class="hover:bg-gray-50 cursor-pointer transition-colors" @click="navigate">
-              <td class="px-5 py-3 font-medium text-gray-900">{{ call.managerName || '—' }}</td>
+              <td class="px-5 py-3 font-medium text-gray-900">
+                <template v-if="call.callType === 'internal'">
+                  {{ participantLabel(call.managerName, call.participantNames) }}
+                  <template v-if="call.secondManagerId">
+                    <span class="text-gray-400 mx-1">&harr;</span>
+                    {{ participantLabel(call.secondManagerName, call.secondParticipantNames) }}
+                  </template>
+                </template>
+                <template v-else>
+                  {{ call.managerName || '—' }}
+                </template>
+              </td>
               <td class="px-5 py-3">
                 <span
                   v-if="call.callType"

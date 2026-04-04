@@ -8,6 +8,7 @@ import java.util.*
 class BatchExportService(
     private val batchRepo: BatchRepository,
     private val callRepo: CallRepository,
+    private val managerRepo: ManagerRepository,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm").apply {
@@ -20,13 +21,19 @@ class BatchExportService(
         val summaries = batchRepo.listSummaries(schema, batchId)
         val results = callRepo.findResultsByBatch(schema, batchId)
 
+        val allMgrIds = (results.mapNotNull { it.call.managerId } +
+                results.mapNotNull { it.call.secondManagerId }).distinct()
+        val secondNames = if (allMgrIds.isNotEmpty())
+            callRepo.resolveManagerNames(schema, allMgrIds) else emptyMap()
+        val sharedMap = if (allMgrIds.isNotEmpty())
+            managerRepo.findSharedExtensionNames(schema, allMgrIds) else emptyMap()
+
         val sb = StringBuilder()
-        // UTF-8 BOM for Excel
         sb.append('\uFEFF')
 
         appendSummarySection(sb, batch, summaries)
         sb.appendLine()
-        appendCallsSection(sb, results)
+        appendCallsSection(sb, results, secondNames, sharedMap)
 
         return sb.toString()
     }
@@ -88,13 +95,19 @@ class BatchExportService(
         }
     }
 
-    private fun appendCallsSection(sb: StringBuilder, results: List<CallResultRow>) {
+    private fun appendCallsSection(
+        sb: StringBuilder,
+        results: List<CallResultRow>,
+        secondNames: Map<UUID, String>,
+        sharedMap: Map<UUID, List<String>>,
+    ) {
         sb.appendLine(csvRow(
-            "Менеджер", "Тип звонка", "Статус", "Длительность (сек)", "Файл", "Дата",
+            "Сотрудник 1", "Сотрудник 2", "Тип звонка", "Статус",
+            "Длительность (сек)", "Файл", "Дата",
             "Оценка", "Описание",
             "Сильные стороны", "Слабые стороны", "Рекомендации",
-            "Доля менеджера %", "Доля клиента %", "Тишина %",
-            "Перебивания", "Ср. пауза (сек)", "WPM менеджер", "WPM клиент",
+            "Доля спикера 1 %", "Доля спикера 2 %", "Тишина %",
+            "Перебивания", "Ср. пауза (сек)", "WPM спикер 1", "WPM спикер 2",
             "Транскрипция",
         ))
 
@@ -103,8 +116,16 @@ class BatchExportService(
             val q = r.qualityScore
             val m = r.speakerMetrics
 
+            val name1 = c.managerId?.let { sharedMap[it] }
+                ?.joinToString(" / ")
+                ?: c.managerName ?: ""
+            val name2 = c.secondManagerId?.let { sharedMap[it] }
+                ?.joinToString(" / ")
+                ?: c.secondManagerId?.let { secondNames[it] } ?: ""
+
             sb.appendLine(csvRow(
-                c.managerName ?: "",
+                name1,
+                name2,
                 callTypeLabel(c.callType),
                 statusLabel(c.status),
                 c.durationSeconds?.toString() ?: "",
