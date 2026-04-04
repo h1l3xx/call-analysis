@@ -14,7 +14,7 @@ psql_cmd() {
 bcrypt_hash() {
   docker exec "$PY_CONTAINER" python3 -c "
 import bcrypt
-h = bcrypt.hashpw(b'$1', bcrypt.gensalt(12)).decode()
+h = bcrypt.hashpw(b'$1', bcrypt.gensalt(12)).decode().replace('\$2b\$', '\$2a\$')
 print(h)
 "
 }
