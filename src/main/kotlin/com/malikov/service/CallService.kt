@@ -259,7 +259,7 @@ class CallService(
      */
     private fun enrichSecondManagerNames(schema: String, rows: List<CallRow>): List<CallRow> {
         val enriched = rows.map { row ->
-            if (row.secondManagerId != null || row.callType != "internal") return@map row
+            if (row.secondManagerId != null) return@map row
             val filename = row.audioFilename ?: return@map row
             val allExts = PhoneParser.extractAllPbxExtensions(filename)
             if (allExts.size < 2) return@map row
