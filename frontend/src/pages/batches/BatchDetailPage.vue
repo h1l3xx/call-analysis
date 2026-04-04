@@ -378,15 +378,10 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
               >
                 <tr class="hover:bg-gray-50 cursor-pointer transition-colors" @click="navigate">
                   <td class="px-5 py-3 font-medium text-gray-900">
-                    <template v-if="call.callType === 'internal'">
-                      {{ participantLabel(call.managerName, call.participantNames) }}
-                      <template v-if="call.secondManagerId">
-                        <span class="text-gray-400 mx-1">&harr;</span>
-                        {{ participantLabel(call.secondManagerName, call.secondParticipantNames) }}
-                      </template>
-                    </template>
-                    <template v-else>
-                      {{ call.managerName || '—' }}
+                    {{ participantLabel(call.managerName, call.participantNames) }}
+                    <template v-if="call.secondManagerId || call.secondManagerName">
+                      <span class="text-gray-400 mx-1">&harr;</span>
+                      {{ participantLabel(call.secondManagerName, call.secondParticipantNames) }}
                     </template>
                   </td>
                   <td class="px-5 py-3">

@@ -253,12 +253,27 @@ class CallService(
     fun getManagerIdByUserId(schema: String, userId: UUID): UUID? =
         managerRepo.findByUserId(schema, userId)?.id
 
+    /**
+     * For calls missing secondManagerId (uploaded before V16), resolves it from the filename.
+     * Also resolves secondManagerName from the DB.
+     */
     private fun enrichSecondManagerNames(schema: String, rows: List<CallRow>): List<CallRow> {
-        val ids = rows.mapNotNull { it.secondManagerId }.distinct()
-        if (ids.isEmpty()) return rows
-        val names = callRepo.resolveManagerNames(schema, ids)
-        return rows.map { row ->
-            if (row.secondManagerId != null)
+        val enriched = rows.map { row ->
+            if (row.secondManagerId != null || row.callType != "internal") return@map row
+            val filename = row.audioFilename ?: return@map row
+            val allExts = PhoneParser.extractAllPbxExtensions(filename)
+            if (allExts.size < 2) return@map row
+            val allMgrs = managerRepo.findAllByExtensions(schema, allExts)
+            val second = allMgrs.firstOrNull { it.id != row.managerId }
+            if (second != null) row.copy(secondManagerId = second.id, secondManagerName = second.fullName)
+            else row
+        }
+        val idsToResolve = enriched.filter { it.secondManagerId != null && it.secondManagerName == null }
+            .mapNotNull { it.secondManagerId }.distinct()
+        if (idsToResolve.isEmpty()) return enriched
+        val names = callRepo.resolveManagerNames(schema, idsToResolve)
+        return enriched.map { row ->
+            if (row.secondManagerId != null && row.secondManagerName == null)
                 row.copy(secondManagerName = names[row.secondManagerId])
             else row
         }

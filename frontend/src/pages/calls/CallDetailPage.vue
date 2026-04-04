@@ -93,17 +93,14 @@ const tabs = [
       <div class="bg-white rounded-xl border border-gray-200 p-5">
         <div class="flex flex-wrap gap-x-8 gap-y-3">
           <div>
-            <p class="text-xs text-gray-500">{{ call.callType === 'internal' ? 'Участники' : 'Менеджер' }}</p>
+            <p class="text-xs text-gray-500">
+              {{ (call.secondManagerId || call.secondManagerName || (call.participantNames && call.participantNames.length > 1)) ? 'Участники' : 'Сотрудник' }}
+            </p>
             <p class="text-sm font-medium text-gray-900">
-              <template v-if="call.callType === 'internal'">
-                {{ participantLabel(call.managerName, call.participantNames) }}
-                <template v-if="call.secondManagerId">
-                  <span class="text-gray-400 mx-1">&harr;</span>
-                  {{ participantLabel(call.secondManagerName, call.secondParticipantNames) }}
-                </template>
-              </template>
-              <template v-else>
-                {{ call.managerName || '—' }}
+              {{ participantLabel(call.managerName, call.participantNames) }}
+              <template v-if="call.secondManagerId || call.secondManagerName">
+                <span class="text-gray-400 mx-1">&harr;</span>
+                {{ participantLabel(call.secondManagerName, call.secondParticipantNames) }}
               </template>
             </p>
           </div>

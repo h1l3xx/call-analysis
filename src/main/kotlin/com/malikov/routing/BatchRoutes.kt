@@ -8,6 +8,7 @@ import com.malikov.db.ManagerRepository
 import com.malikov.dto.*
 import com.malikov.service.BatchExportService
 import com.malikov.service.BatchSummaryService
+import com.malikov.service.PhoneParser
 import io.ktor.http.*
 import io.ktor.server.application.call
 import io.ktor.server.request.*
@@ -58,19 +59,30 @@ fun Route.batchRoutes(
 
         get("/{id}/calls") {
             val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val schema = p.schema!!
             val batchId = pathUuid("id")
             val params = paginationParams()
             val callType = call.parameters["callType"]
-            val (items, total) = batchRepo.listCallsByBatch(
-                p.schema!!, batchId, callType, params.offset, params.pageSize
+            val (rawItems, total) = batchRepo.listCallsByBatch(
+                schema, batchId, callType, params.offset, params.pageSize
             )
-            val secondIds = items.mapNotNull { it.secondManagerId }
-            val secondNames = if (secondIds.isNotEmpty())
-                callRepo.resolveManagerNames(p.schema!!, secondIds) else emptyMap()
+
+            val items = rawItems.map { row ->
+                if (row.secondManagerId != null || row.callType != "internal") return@map row
+                val filename = row.audioFilename ?: return@map row
+                val allExts = PhoneParser.extractAllPbxExtensions(filename)
+                if (allExts.size < 2) return@map row
+                val allMgrs = managerRepo.findAllByExtensions(schema, allExts)
+                val second = allMgrs.firstOrNull { it.id != row.managerId }
+                if (second != null) row.copy(secondManagerId = second.id, secondManagerName = second.fullName)
+                else row
+            }
 
             val allMgrIds = (items.mapNotNull { it.managerId } + items.mapNotNull { it.secondManagerId }).distinct()
+            val secondNames = if (allMgrIds.isNotEmpty())
+                callRepo.resolveManagerNames(schema, allMgrIds) else emptyMap()
             val sharedMap = if (allMgrIds.isNotEmpty())
-                managerRepo.findSharedExtensionNames(p.schema!!, allMgrIds) else emptyMap()
+                managerRepo.findSharedExtensionNames(schema, allMgrIds) else emptyMap()
 
             val response = items.map {
                 CallResponse(
@@ -78,7 +90,8 @@ fun Route.batchRoutes(
                     managerId = it.managerId?.toString(),
                     managerName = it.managerName,
                     secondManagerId = it.secondManagerId?.toString(),
-                    secondManagerName = it.secondManagerId?.let { id -> secondNames[id] },
+                    secondManagerName = it.secondManagerName
+                        ?: it.secondManagerId?.let { id -> secondNames[id] },
                     participantNames = it.managerId?.let { id -> sharedMap[id] },
                     secondParticipantNames = it.secondManagerId?.let { id -> sharedMap[id] },
                     scriptId = it.scriptId?.toString(),
