@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Plus, ChevronLeft, ChevronRight, Eye } from 'lucide-vue-next'
+import { ref, nextTick, onMounted } from 'vue'
+import { Plus, ChevronLeft, ChevronRight, Eye, X } from 'lucide-vue-next'
 import { adminApi } from '@/api'
 import type { TenantResponse, TenantUsageResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
@@ -16,7 +16,30 @@ const totalPages = ref(1)
 const showCreate = ref(false)
 
 const selectedUsage = ref<TenantUsageResponse | null>(null)
+const selectedTenantId = ref<string | null>(null)
 const usageLoading = ref(false)
+const usageCardRef = ref<HTMLElement | null>(null)
+
+async function viewUsage(tenantId: string) {
+  if (selectedTenantId.value === tenantId) {
+    selectedUsage.value = null
+    selectedTenantId.value = null
+    return
+  }
+  usageLoading.value = true
+  selectedTenantId.value = tenantId
+  try {
+    const { data } = await adminApi.getTenantUsage(tenantId)
+    selectedUsage.value = data
+    await nextTick()
+    usageCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  } catch {
+    selectedUsage.value = null
+    selectedTenantId.value = null
+  } finally {
+    usageLoading.value = false
+  }
+}
 
 async function fetchTenants() {
   loading.value = true
@@ -26,19 +49,6 @@ async function fetchTenants() {
     totalPages.value = data.totalPages
   } finally {
     loading.value = false
-  }
-}
-
-async function viewUsage(tenantId: string) {
-  usageLoading.value = true
-  selectedUsage.value = null
-  try {
-    const { data } = await adminApi.getTenantUsage(tenantId)
-    selectedUsage.value = data
-  } catch {
-    // handled by interceptor
-  } finally {
-    usageLoading.value = false
   }
 }
 
@@ -58,8 +68,6 @@ onMounted(fetchTenants)
       </button>
     </div>
 
-    <UsageCard v-if="selectedUsage" :usage="selectedUsage" />
-
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div v-if="loading" class="p-12 text-center text-gray-400">Загрузка...</div>
       <table v-else class="w-full text-sm">
@@ -77,30 +85,52 @@ onMounted(fetchTenants)
           <tr v-if="!tenants.length">
             <td colspan="6" class="px-5 py-12 text-center text-gray-400">Нет тенантов</td>
           </tr>
-          <tr v-for="t in tenants" :key="t.id" class="hover:bg-gray-50 transition-colors">
-            <td class="px-5 py-3 font-medium text-gray-900">{{ t.name }}</td>
-            <td class="px-5 py-3 text-gray-600">{{ t.slug }}</td>
-            <td class="px-5 py-3 font-mono text-xs text-gray-500">{{ t.dbSchema }}</td>
-            <td class="px-5 py-3">
-              <span
-                :class="[
-                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-                  t.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600',
-                ]"
-              >
-                {{ t.isActive ? 'Активен' : 'Неактивен' }}
-              </span>
-            </td>
-            <td class="px-5 py-3 text-gray-500">{{ formatDate(t.createdAt) }}</td>
-            <td class="px-5 py-3">
-              <button
-                class="text-primary-600 hover:text-primary-700 text-xs font-medium"
-                @click="viewUsage(t.id)"
-              >
-                <Eye class="w-4 h-4" />
-              </button>
-            </td>
-          </tr>
+          <template v-for="t in tenants" :key="t.id">
+            <tr
+              :class="[
+                'transition-colors cursor-pointer',
+                selectedTenantId === t.id ? 'bg-primary-50' : 'hover:bg-gray-50',
+              ]"
+              @click="viewUsage(t.id)"
+            >
+              <td class="px-5 py-3 font-medium text-gray-900">{{ t.name }}</td>
+              <td class="px-5 py-3 text-gray-600">{{ t.slug }}</td>
+              <td class="px-5 py-3 font-mono text-xs text-gray-500">{{ t.dbSchema }}</td>
+              <td class="px-5 py-3">
+                <span
+                  :class="[
+                    'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                    t.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600',
+                  ]"
+                >
+                  {{ t.isActive ? 'Активен' : 'Неактивен' }}
+                </span>
+              </td>
+              <td class="px-5 py-3 text-gray-500">{{ formatDate(t.createdAt) }}</td>
+              <td class="px-5 py-3">
+                <button
+                  :class="[
+                    'p-1 rounded transition-colors',
+                    selectedTenantId === t.id
+                      ? 'text-primary-700 bg-primary-100'
+                      : 'text-primary-600 hover:text-primary-700 hover:bg-gray-100',
+                  ]"
+                  @click.stop="viewUsage(t.id)"
+                >
+                  <Eye v-if="selectedTenantId !== t.id" class="w-4 h-4" />
+                  <X v-else class="w-4 h-4" />
+                </button>
+              </td>
+            </tr>
+            <tr v-if="selectedTenantId === t.id && (selectedUsage || usageLoading)" ref="usageCardRef">
+              <td colspan="6" class="p-0">
+                <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 animate-slideDown">
+                  <div v-if="usageLoading" class="py-3 text-center text-gray-400 text-sm">Загрузка...</div>
+                  <UsageCard v-else-if="selectedUsage" :usage="selectedUsage" />
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -130,3 +160,13 @@ onMounted(fetchTenants)
     />
   </div>
 </template>
+
+<style scoped>
+.animate-slideDown {
+  animation: slideDown 0.2s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 200px; }
+}
+</style>
