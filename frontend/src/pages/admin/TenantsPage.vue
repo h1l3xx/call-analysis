@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Plus, ChevronLeft, ChevronRight, Eye, X } from 'lucide-vue-next'
 import { adminApi } from '@/api'
 import type { TenantResponse, TenantUsageResponse } from '@/types'
@@ -19,7 +19,6 @@ const selectedUsage = ref<TenantUsageResponse | null>(null)
 const selectedTenantId = ref<string | null>(null)
 const usageLoading = ref(false)
 const usageError = ref('')
-const usageCardRef = ref<HTMLElement | null>(null)
 
 async function viewUsage(tenantId: string) {
   if (selectedTenantId.value === tenantId && !usageLoading.value) {
@@ -35,8 +34,6 @@ async function viewUsage(tenantId: string) {
   try {
     const { data } = await adminApi.getTenantUsage(tenantId)
     selectedUsage.value = data
-    await nextTick()
-    usageCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   } catch (e: any) {
     console.error('getTenantUsage failed:', e)
     usageError.value = e.response?.data?.error || 'Не удалось загрузить данные'
@@ -125,7 +122,7 @@ onMounted(fetchTenants)
                 </button>
               </td>
             </tr>
-            <tr v-if="selectedTenantId === t.id" ref="usageCardRef">
+            <tr v-if="selectedTenantId === t.id">
               <td colspan="6" class="p-0">
                 <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 animate-slideDown">
                   <div v-if="usageLoading" class="py-3 text-center text-gray-400 text-sm">Загрузка...</div>
