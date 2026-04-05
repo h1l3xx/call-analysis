@@ -18,24 +18,28 @@ const showCreate = ref(false)
 const selectedUsage = ref<TenantUsageResponse | null>(null)
 const selectedTenantId = ref<string | null>(null)
 const usageLoading = ref(false)
+const usageError = ref('')
 const usageCardRef = ref<HTMLElement | null>(null)
 
 async function viewUsage(tenantId: string) {
-  if (selectedTenantId.value === tenantId) {
+  if (selectedTenantId.value === tenantId && !usageLoading.value) {
     selectedUsage.value = null
     selectedTenantId.value = null
+    usageError.value = ''
     return
   }
   usageLoading.value = true
+  usageError.value = ''
   selectedTenantId.value = tenantId
+  selectedUsage.value = null
   try {
     const { data } = await adminApi.getTenantUsage(tenantId)
     selectedUsage.value = data
     await nextTick()
     usageCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  } catch {
-    selectedUsage.value = null
-    selectedTenantId.value = null
+  } catch (e: any) {
+    console.error('getTenantUsage failed:', e)
+    usageError.value = e.response?.data?.error || 'Не удалось загрузить данные'
   } finally {
     usageLoading.value = false
   }
@@ -88,10 +92,9 @@ onMounted(fetchTenants)
           <template v-for="t in tenants" :key="t.id">
             <tr
               :class="[
-                'transition-colors cursor-pointer',
-                selectedTenantId === t.id ? 'bg-primary-50' : 'hover:bg-gray-50',
+                'transition-colors hover:bg-gray-50',
+                selectedTenantId === t.id ? 'bg-primary-50' : '',
               ]"
-              @click="viewUsage(t.id)"
             >
               <td class="px-5 py-3 font-medium text-gray-900">{{ t.name }}</td>
               <td class="px-5 py-3 text-gray-600">{{ t.slug }}</td>
@@ -110,22 +113,23 @@ onMounted(fetchTenants)
               <td class="px-5 py-3">
                 <button
                   :class="[
-                    'p-1 rounded transition-colors',
+                    'p-1.5 rounded transition-colors',
                     selectedTenantId === t.id
                       ? 'text-primary-700 bg-primary-100'
                       : 'text-primary-600 hover:text-primary-700 hover:bg-gray-100',
                   ]"
-                  @click.stop="viewUsage(t.id)"
+                  @click="viewUsage(t.id)"
                 >
                   <Eye v-if="selectedTenantId !== t.id" class="w-4 h-4" />
                   <X v-else class="w-4 h-4" />
                 </button>
               </td>
             </tr>
-            <tr v-if="selectedTenantId === t.id && (selectedUsage || usageLoading)" ref="usageCardRef">
+            <tr v-if="selectedTenantId === t.id" ref="usageCardRef">
               <td colspan="6" class="p-0">
                 <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 animate-slideDown">
                   <div v-if="usageLoading" class="py-3 text-center text-gray-400 text-sm">Загрузка...</div>
+                  <div v-else-if="usageError" class="py-3 text-center text-red-500 text-sm">{{ usageError }}</div>
                   <UsageCard v-else-if="selectedUsage" :usage="selectedUsage" />
                 </div>
               </td>
