@@ -21,7 +21,16 @@ async function handleSubmit() {
     const redirect = (route.query.redirect as string) || (auth.isSuperAdmin ? '/admin/tenants' : '/dashboard')
     router.push(redirect)
   } catch (e: any) {
-    error.value = e.response?.data?.error || 'Ошибка авторизации'
+    const serverMsg = e.response?.data?.error
+    if (e.response?.status === 401) {
+      error.value = 'Неверный email или пароль'
+    } else if (e.response?.status === 403) {
+      error.value = 'Аккаунт деактивирован'
+    } else if (serverMsg) {
+      error.value = serverMsg
+    } else {
+      error.value = 'Ошибка авторизации. Попробуйте позже.'
+    }
   } finally {
     loading.value = false
   }
@@ -37,7 +46,10 @@ async function handleSubmit() {
       </div>
 
       <form @submit.prevent="handleSubmit" class="space-y-5">
-        <div v-if="error" class="bg-red-50 text-red-700 text-sm rounded-lg px-4 py-3">
+        <div v-if="error" class="login-error text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+          <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
           {{ error }}
         </div>
 
@@ -94,5 +106,18 @@ async function handleSubmit() {
   background-color: #ffffff;
   border-color: #d1d5db;
   color: #111827;
+}
+.login-error {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  animation: shake 0.4s ease-in-out;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
 }
 </style>

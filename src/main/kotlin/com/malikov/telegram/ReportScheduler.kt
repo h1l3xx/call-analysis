@@ -45,12 +45,24 @@ class ReportScheduler(
 
     private suspend fun dailyLoop() {
         while (scope.isActive) {
-            val delayMs = msUntilNextDaily()
+            val delayMs = msUntilNextWeekday()
             log.debug { "Next daily report in ${delayMs / 1000}s" }
             delay(delayMs)
 
             try {
-                reportService.sendDailyReports()
+                val now = ZonedDateTime.now(zone)
+                when (now.dayOfWeek) {
+                    DayOfWeek.MONDAY -> {
+                        val fridayStart = now.toLocalDate().minusDays(3)
+                            .atStartOfDay(zone).toInstant().toEpochMilli()
+                        reportService.sendDailyReports(fridayStart, "за пятницу")
+                    }
+                    DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+                    DayOfWeek.THURSDAY, DayOfWeek.FRIDAY -> {
+                        reportService.sendDailyReports()
+                    }
+                    else -> { /* weekend — skip */ }
+                }
             } catch (e: CancellationException) {
                 break
             } catch (e: Exception) {
@@ -79,11 +91,14 @@ class ReportScheduler(
         }
     }
 
-    private fun msUntilNextDaily(): Long {
+    private fun msUntilNextWeekday(): Long {
         val now = ZonedDateTime.now(zone)
         val targetTime = LocalTime.parse(config.dailyTime, timeFormatter)
         var next = now.toLocalDate().atTime(targetTime).atZone(zone)
         if (now >= next) next = next.plusDays(1)
+        while (next.dayOfWeek == DayOfWeek.SATURDAY || next.dayOfWeek == DayOfWeek.SUNDAY) {
+            next = next.plusDays(1)
+        }
         return Duration.between(now, next).toMillis().coerceAtLeast(1000)
     }
 

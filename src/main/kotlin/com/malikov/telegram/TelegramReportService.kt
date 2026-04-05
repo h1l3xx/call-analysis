@@ -13,9 +13,11 @@ class TelegramReportService(
     private val botService: TelegramBotService,
 ) {
 
-    suspend fun sendDailyReports() {
-        val sinceMs = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
-        sendReports(sinceMs, "за последние 24 часа", "Ежедневный")
+    suspend fun sendDailyReports(
+        sinceMs: Long = System.currentTimeMillis() - 24 * 60 * 60 * 1000L,
+        periodLabel: String = "за последние 24 часа",
+    ) {
+        sendReports(sinceMs, periodLabel, "Ежедневный")
     }
 
     suspend fun sendWeeklyReports() {
