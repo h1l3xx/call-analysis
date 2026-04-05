@@ -76,6 +76,9 @@ class TelegramBotService(
     private val apiBase = "https://api.telegram.org/bot${config.botToken}"
 
     private val httpClient = HttpClient(CIO) {
+        engine {
+            requestTimeout = 0
+        }
         install(ContentNegotiation) {
             json(json)
         }
