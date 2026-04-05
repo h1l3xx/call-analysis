@@ -18,8 +18,11 @@ async function handleSubmit() {
   loading.value = true
   try {
     await auth.login(email.value, password.value)
-    const redirect = (route.query.redirect as string) || (auth.isSuperAdmin ? '/admin/tenants' : '/dashboard')
-    router.push(redirect)
+    if (auth.isSuperAdmin) {
+      router.push('/admin/tenants')
+    } else {
+      router.push((route.query.redirect as string) || '/dashboard')
+    }
   } catch (e: any) {
     const serverMsg = e.response?.data?.error
     if (e.response?.status === 401) {

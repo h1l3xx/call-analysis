@@ -22,7 +22,10 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/dashboard',
+      redirect: () => {
+        const auth = useAuthStore()
+        return auth.isSuperAdmin ? '/admin/tenants' : '/dashboard'
+      },
     },
     {
       path: '/dashboard',
