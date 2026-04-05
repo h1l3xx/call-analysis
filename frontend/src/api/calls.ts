@@ -11,6 +11,9 @@ export const callsApi = {
   list(params: { page?: number; pageSize?: number; status?: string; managerId?: string } = {}) {
     return client.get<PaginatedResponse<CallResponse>>('/api/v1/calls', { params })
   },
+  stats() {
+    return client.get<{ total: number; processing: number; done: number; failed: number }>('/api/v1/calls/stats')
+  },
   get(id: string) {
     return client.get<CallDetailResponse>(`/api/v1/calls/${id}`)
   },

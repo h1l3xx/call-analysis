@@ -11,20 +11,12 @@ const stats = ref({ total: 0, processing: 0, done: 0, failed: 0 })
 
 onMounted(async () => {
   try {
-    const { data } = await callsApi.list({ page: 1, pageSize: 10 })
-    recentCalls.value = data.items
-    stats.value.total = data.total
-
-    const counts = data.items.reduce(
-      (acc, c) => {
-        if (['queued', 'processing', 'analyzing'].includes(c.status)) acc.processing++
-        else if (['done', 'transcribed_only'].includes(c.status)) acc.done++
-        else if (c.status === 'failed') acc.failed++
-        return acc
-      },
-      { processing: 0, done: 0, failed: 0 },
-    )
-    stats.value = { ...stats.value, ...counts }
+    const [callsRes, statsRes] = await Promise.all([
+      callsApi.list({ page: 1, pageSize: 10 }),
+      callsApi.stats(),
+    ])
+    recentCalls.value = callsRes.data.items
+    stats.value = statsRes.data
   } finally {
     loading.value = false
   }

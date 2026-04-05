@@ -324,6 +324,18 @@ class CallRepository {
             .associate { it[m.id] to it[Users.fullName] }
     }
 
+    fun countByStatus(schema: String, managerId: UUID? = null): Map<String, Long> = transaction {
+        val cl = TCalls(schema)
+        val query = if (managerId != null) {
+            cl.select(cl.status, cl.id.count())
+                .where { cl.managerId eq managerId }
+        } else {
+            cl.select(cl.status, cl.id.count())
+        }
+        query.groupBy(cl.status)
+            .associate { it[cl.status] to it[cl.id.count()] }
+    }
+
     private fun ResultRow.toCallRow(cl: TCalls, m: TManagers, s: TScripts) = CallRow(
         id                = this[cl.id],
         managerId         = this[cl.managerId],

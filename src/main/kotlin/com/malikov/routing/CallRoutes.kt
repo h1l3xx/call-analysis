@@ -163,6 +163,15 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
             }
         }
 
+        // ── Статистика по статусам ──
+        get("/stats") {
+            val p = requireTenantRole(Role.MANAGER, Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val managerId = if (p.roleEnum == Role.MANAGER) {
+                service.getManagerIdByUserId(p.schema!!, UUID.fromString(p.userId))
+            } else null
+            call.respond(service.getStats(p.schema!!, managerId))
+        }
+
         // ── Список звонков ──
         get {
             val p = requireTenantRole(Role.MANAGER, Role.TEAM_LEAD, Role.CLIENT_ADMIN)

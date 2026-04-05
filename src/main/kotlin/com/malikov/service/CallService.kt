@@ -244,6 +244,16 @@ class CallService(
         )
     }
 
+    fun getStats(schema: String, managerId: UUID? = null): Map<String, Long> {
+        val byStatus = callRepo.countByStatus(schema, managerId)
+        val processing = listOf("queued", "processing", "analyzing", "transcribing")
+            .sumOf { byStatus[it] ?: 0L }
+        val done = (byStatus["done"] ?: 0L) + (byStatus["transcribed_only"] ?: 0L)
+        val failed = byStatus["failed"] ?: 0L
+        val total = byStatus.values.sum()
+        return mapOf("total" to total, "processing" to processing, "done" to done, "failed" to failed)
+    }
+
     fun getResult(schema: String, callId: UUID): CallResultResponse {
         val result = callRepo.findResult(schema, callId)
             ?: throw NotFoundException("Call not found")

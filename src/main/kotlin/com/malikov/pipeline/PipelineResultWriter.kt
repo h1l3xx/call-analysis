@@ -86,9 +86,14 @@ class PipelineResultWriter {
         writeSpeakerMetrics(schema, callId, response, now)
 
         val cl = TCalls(schema)
+        val durationSec = response.asrMetrics?.audioDuration?.toInt()
         cl.update({ cl.id eq callId }) {
             it[cl.status] = "transcribed_only"
-            it[cl.durationSeconds] = response.asrMetrics?.audioDuration?.toInt()
+            it[cl.durationSeconds] = durationSec
+        }
+
+        if (durationSec != null && durationSec > 0) {
+            billMinutes(schema, callId, durationSec)
         }
 
         log.info("Transcription saved for call {} in schema {} (no quality)", callId, schema)
