@@ -6,7 +6,6 @@
 .env.*
 !.env.example
 build/
-!build/libs/malikov-backend.jar
 frontend/
 pipeline/
 deploy/

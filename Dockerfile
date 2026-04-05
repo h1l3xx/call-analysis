@@ -1,8 +1,19 @@
+FROM eclipse-temurin:21-jdk-alpine AS build
+
+WORKDIR /build
+
+COPY gradle/ gradle/
+COPY gradlew build.gradle.kts settings.gradle.kts ./
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon 2>/dev/null || true
+
+COPY src/ src/
+RUN ./gradlew shadowJar --no-daemon
+
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
 WORKDIR /app
 
-COPY build/libs/malikov-backend.jar app.jar
+COPY --from=build /build/build/libs/malikov-backend.jar app.jar
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
   CMD wget -qO- http://localhost:8080/health || exit 1
