@@ -27,6 +27,7 @@ import java.util.UUID
  */
 class InternalCallEvaluator(
     private val config: PipelineConfig,
+    private val promptTemplateService: PromptTemplateService? = null,
 ) {
     private val log = LoggerFactory.getLogger(InternalCallEvaluator::class.java)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
@@ -45,40 +46,51 @@ class InternalCallEvaluator(
         expectSuccess = false
     }
 
-    /**
-     * Оценка внутреннего звонка: бизнес-процессы + коммуникация.
-     */
     fun evaluate(schema: String, callId: UUID, transcription: String) {
-        val qualityJson = callLlmForInternalEvaluation(transcription)
+        val qualityJson = callLlmForInternalEvaluation(schema, transcription)
         saveInternalQuality(schema, callId, qualityJson)
     }
 
-    /**
-     * Оценка внешнего звонка по критериям скрипта.
-     */
     fun evaluateWithCriteria(
+        schema: String,
         transcription: String,
         criteria: List<PipelineCriterionInput>,
         scriptName: String,
     ): String {
-        return callLlmForExternalEvaluation(transcription, criteria, scriptName)
+        return callLlmForExternalEvaluation(schema, transcription, criteria, scriptName)
     }
 
-    private fun callLlmForInternalEvaluation(transcription: String): String {
-        val prompt = buildInternalPrompt(transcription)
-        return callLlm(prompt)
+    private fun callLlmForInternalEvaluation(schema: String, transcription: String): String {
+        val template = getTemplate(schema, "internal_eval", PromptTemplateService.DEFAULT_INTERNAL_EVAL)
+        val prompt = template.replace("{transcription}", transcription)
+        return callLlm(schema, prompt)
     }
 
     private fun callLlmForExternalEvaluation(
+        schema: String,
         transcription: String,
         criteria: List<PipelineCriterionInput>,
         scriptName: String,
     ): String {
-        val prompt = buildExternalPrompt(transcription, criteria, scriptName)
-        return callLlm(prompt)
+        val template = getTemplate(schema, "external_eval", PromptTemplateService.DEFAULT_EXTERNAL_EVAL)
+        val criteriaList = criteria.joinToString("\n") { "  ${it.id}. ${it.name}: ${it.description}" }
+        val prompt = template
+            .replace("{transcription}", transcription)
+            .replace("{criteria}", criteriaList)
+            .replace("{scriptName}", scriptName)
+        return callLlm(schema, prompt)
     }
 
-    private fun callLlm(prompt: String): String {
+    private fun getTemplate(schema: String, id: String, fallback: String): String =
+        try {
+            promptTemplateService?.getContent(schema, id)?.takeIf { it.isNotBlank() } ?: fallback
+        } catch (e: Exception) {
+            log.warn("Failed to load template '{}' from DB for schema '{}', using default", id, schema, e)
+            fallback
+        }
+
+    private fun callLlm(schema: String, prompt: String): String {
+        val systemPrompt = getTemplate(schema, "system", PromptTemplateService.DEFAULT_SYSTEM)
         return kotlinx.coroutines.runBlocking {
             val response = client.post("$llmBaseUrl/chat/completions") {
                 header("Authorization", "Bearer $llmApiKey")
@@ -86,7 +98,7 @@ class InternalCallEvaluator(
                 setBody(json.encodeToString(LlmRequest(
                     model = llmModel,
                     messages = listOf(
-                        LlmMessage("system", "Ты — эксперт по оценке качества телефонных разговоров. Отвечай ТОЛЬКО в формате JSON."),
+                        LlmMessage("system", systemPrompt),
                         LlmMessage("user", prompt),
                     ),
                     responseFormat = LlmResponseFormat("json_object"),
@@ -104,81 +116,6 @@ class InternalCallEvaluator(
             result.choices.firstOrNull()?.message?.content
                 ?: throw RuntimeException("Empty LLM response")
         }
-    }
-
-    private fun buildInternalPrompt(transcription: String): String = """
-Проанализируй следующий ВНУТРЕННИЙ телефонный разговор между сотрудниками компании.
-
-Транскрипция:
----
-$transcription
----
-
-Оцени разговор по 5 критериям эффективного внутреннего общения:
-
-1. **Ясность и структурированность** (0–100): чёткость формулировок, логика изложения, отсутствие двусмысленности.
-2. **Результативность** (0–100): наличие конкретных решений, action items, ответственных и дедлайнов.
-3. **Профессионализм** (0–100): деловой тон, отсутствие конфликтности и эмоциональных срывов, уважительное общение.
-4. **Эффективность времени** (0–100): отношение полезного содержания к общей длительности, отсутствие уходов от темы.
-5. **Соблюдение процедур** (0–100): следование регламентам, корректная эскалация при необходимости, фиксация договорённостей.
-
-Также напиши краткое описание звонка (2–3 предложения): кто звонил, по какому поводу, чем закончился.
-
-Ответ СТРОГО в JSON формате:
-{
-  "summary": "<краткое описание: кто звонил, тема, итог — 2-3 предложения>",
-  "overall_score": <число от 0 до 100>,
-  "criteria_scores": {
-    "clarity": {"score": <0–100>, "comment": "<пояснение>"},
-    "effectiveness": {"score": <0–100>, "comment": "<пояснение>"},
-    "professionalism": {"score": <0–100>, "comment": "<пояснение>"},
-    "time_efficiency": {"score": <0–100>, "comment": "<пояснение>"},
-    "procedures": {"score": <0–100>, "comment": "<пояснение>"}
-  },
-  "action_items": ["конкретный action item 1", ...],
-  "strengths": ["сильная сторона 1", ...],
-  "weaknesses": ["слабая сторона 1", ...],
-  "recommendations": ["рекомендация 1", ...]
-}
-""".trimIndent()
-
-    private fun buildExternalPrompt(
-        transcription: String,
-        criteria: List<PipelineCriterionInput>,
-        scriptName: String,
-    ): String {
-        val criteriaList = criteria.joinToString("\n") { "  ${it.id}. ${it.name}: ${it.description}" }
-        return """
-Проанализируй следующий разговор менеджера с клиентом по скрипту "$scriptName".
-
-Транскрипция:
----
-$transcription
----
-
-Критерии оценки:
-$criteriaList
-
-Оцени каждый критерий. Также напиши краткое описание звонка (2–3 предложения): кто обратился, с какой целью, чем закончился разговор.
-
-Ответ СТРОГО в JSON формате:
-{
-  "summary": "<краткое описание: кто обратился, цель, итог — 2-3 предложения>",
-  "overall_score": <число от 0 до 100>,
-  "criteria_evaluations": [
-    {
-      "id": <номер критерия>,
-      "name": "<название>",
-      "score": <0.0, 0.5 или 1.0>,
-      "comment": "<комментарий>",
-      "relevant": <true/false>
-    }
-  ],
-  "strengths": ["сильная сторона 1", ...],
-  "weaknesses": ["слабая сторона 1", ...],
-  "recommendations": ["рекомендация 1", ...]
-}
-""".trimIndent()
     }
 
     private fun saveInternalQuality(schema: String, callId: UUID, qualityJson: String) =

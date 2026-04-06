@@ -70,7 +70,7 @@ class PipelineService(
                 markStatus(schema, callId, "analyzing")
 
                 if (criteria != null && criteria.isNotEmpty()) {
-                    val qualityJson = evaluator.evaluateWithCriteria(transcription, criteria, "script")
+                    val qualityJson = evaluator.evaluateWithCriteria(schema, transcription, criteria, "script")
                     resultWriter.saveQualityFromJson(schema, callId, scriptId, qualityJson)
                 } else {
                     evaluator.evaluate(schema, callId, transcription)

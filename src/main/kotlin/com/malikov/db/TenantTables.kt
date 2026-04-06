@@ -194,3 +194,13 @@ class TBatchSummaries(schema: String) : Table("$schema.batch_summaries") {
 
     override val primaryKey = PrimaryKey(id)
 }
+
+class TPromptTemplates(schema: String) : Table("$schema.prompt_templates") {
+    val id          = text("id")
+    val name        = text("name")
+    val description = text("description").nullable()
+    val content     = text("content")
+    val updatedAt   = long("updated_at")
+
+    override val primaryKey = PrimaryKey(id)
+}

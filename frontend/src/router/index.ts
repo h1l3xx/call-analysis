@@ -82,6 +82,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
     },
     {
+      path: '/settings/prompts',
+      name: 'prompt-templates',
+      component: () => import('@/pages/PromptTemplatesPage.vue'),
+      meta: { requiresAuth: true, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
+    },
+    {
       path: '/admin/tenants',
       name: 'admin-tenants',
       component: () => import('@/pages/admin/TenantsPage.vue'),

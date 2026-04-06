@@ -51,6 +51,7 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
                 pipelineRoutes(services.pipelineService)
                 telegramRoutes(services.telegramLinkService, config.telegram.linkCodeTtlMin)
                 departmentLeadRoutes(services.departmentLeadRepository)
+                promptTemplateRoutes(services.promptTemplateService)
             }
 
             route("/api/v1/admin") {

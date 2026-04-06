@@ -15,6 +15,7 @@ import {
   Moon,
   Settings,
   Package,
+  MessageSquareCode,
 } from 'lucide-vue-next'
 import { useDarkMode } from '@/composables/useDarkMode'
 
@@ -33,6 +34,7 @@ const navItems = computed(() => {
       { to: '/batches', label: 'Батчи', icon: Package, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
       { to: '/scripts', label: 'Скрипты', icon: FileText, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
       { to: '/managers', label: 'Менеджеры', icon: Users, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
+      { to: '/settings/prompts', label: 'Промпты', icon: MessageSquareCode, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
       { to: '/settings', label: 'Настройки', icon: Settings, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
     )
   } else {

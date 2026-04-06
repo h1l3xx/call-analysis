@@ -24,9 +24,10 @@ class ServiceRegistry(config: AppConfig) {
     val scriptRepository        = ScriptRepository()
     val callRepository          = CallRepository()
     val batchRepository         = BatchRepository()
-    val tenantAdminRepository   = TenantAdminRepository()
+    val tenantAdminRepository    = TenantAdminRepository()
     val departmentLeadRepository = DepartmentLeadRepository()
-    val reportRepository        = ReportRepository()
+    val reportRepository         = ReportRepository()
+    val promptTemplateRepository = PromptTemplateRepository()
 
     // Redis
     val redisService = RedisService(config.redis)
@@ -35,12 +36,15 @@ class ServiceRegistry(config: AppConfig) {
     val jwtService  = JwtService(config.jwt)
     val authService = AuthService(userRepository, jwtService)
 
+    // Prompt templates
+    val promptTemplateService = PromptTemplateService(promptTemplateRepository)
+
     // Pipeline (AI module integration)
     val pipelineClient       = PipelineClient(config.pipeline, config.pipeline.apiKey)
     val pipelineResultWriter = PipelineResultWriter()
 
     // LLM evaluation services
-    val internalCallEvaluator = InternalCallEvaluator(config.pipeline)
+    val internalCallEvaluator = InternalCallEvaluator(config.pipeline, promptTemplateService)
 
     val pipelineService      = PipelineService(pipelineClient, pipelineResultWriter, internalCallEvaluator)
     val batchSummaryService   = BatchSummaryService(batchRepository)

@@ -225,7 +225,7 @@ class BatchProcessingService(
             }
 
             val qualityJson = internalCallEvaluator.evaluateWithCriteria(
-                transcription, criteria, scriptDetail.script.name
+                schema, transcription, criteria, scriptDetail.script.name
             )
 
             resultWriter.saveQualityFromJson(
