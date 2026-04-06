@@ -1,5 +1,5 @@
 import client from './client'
-import type { PromptTemplateResponse } from '@/types'
+import type { PromptTemplateResponse, SuggestResponse } from '@/types'
 
 export const promptTemplatesApi = {
   list() {
@@ -13,5 +13,8 @@ export const promptTemplatesApi = {
   },
   reset(id: string) {
     return client.post<PromptTemplateResponse>(`/api/v1/prompt-templates/${id}/reset`)
+  },
+  suggest(id: string, description: string) {
+    return client.post<SuggestResponse>(`/api/v1/prompt-templates/${id}/suggest`, { description })
   },
 }

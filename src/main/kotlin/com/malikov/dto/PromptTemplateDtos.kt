@@ -15,3 +15,13 @@ data class PromptTemplateResponse(
 data class UpdatePromptTemplateRequest(
     val content: String,
 )
+
+@Serializable
+data class SuggestRequest(
+    val description: String,
+)
+
+@Serializable
+data class SuggestResponse(
+    val suggestions: List<String>,
+)

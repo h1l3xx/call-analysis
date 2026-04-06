@@ -19,12 +19,6 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
-/**
- * Оценивает звонки через LLM (OpenAI-совместимый API).
- *
- * Для внутренних звонков: анализ бизнес-процессов + качество коммуникации.
- * Для внешних звонков с критериями: оценка по скрипту продаж.
- */
 class InternalCallEvaluator(
     private val config: PipelineConfig,
     private val promptTemplateService: PromptTemplateService? = null,
@@ -35,6 +29,47 @@ class InternalCallEvaluator(
     private val llmBaseUrl = System.getenv("LLM_API_BASE_URL") ?: "https://openrouter.ai/api/v1"
     private val llmApiKey = System.getenv("LLM_API_KEY") ?: ""
     private val llmModel = System.getenv("LLM_MODEL") ?: "openai/gpt-4.1"
+
+    companion object {
+        const val SYSTEM_PROMPT = "Ты — эксперт по оценке качества телефонных разговоров. Отвечай ТОЛЬКО в формате JSON."
+
+        private val INTERNAL_JSON_FORMAT = """
+Ответ СТРОГО в JSON формате:
+{
+  "summary": "<краткое описание: кто звонил, тема, итог — 2-3 предложения>",
+  "overall_score": <число от 0 до 100>,
+  "criteria_scores": {
+    "clarity": {"score": <0–100>, "comment": "<пояснение>"},
+    "effectiveness": {"score": <0–100>, "comment": "<пояснение>"},
+    "professionalism": {"score": <0–100>, "comment": "<пояснение>"},
+    "time_efficiency": {"score": <0–100>, "comment": "<пояснение>"},
+    "procedures": {"score": <0–100>, "comment": "<пояснение>"}
+  },
+  "action_items": ["конкретный action item 1", ...],
+  "strengths": ["сильная сторона 1", ...],
+  "weaknesses": ["слабая сторона 1", ...],
+  "recommendations": ["рекомендация 1", ...]
+}""".trimIndent()
+
+        private val EXTERNAL_JSON_FORMAT = """
+Ответ СТРОГО в JSON формате:
+{
+  "summary": "<краткое описание: кто обратился, цель, итог — 2-3 предложения>",
+  "overall_score": <число от 0 до 100>,
+  "criteria_evaluations": [
+    {
+      "id": <номер критерия>,
+      "name": "<название>",
+      "score": <0.0, 0.5 или 1.0>,
+      "comment": "<комментарий>",
+      "relevant": <true/false>
+    }
+  ],
+  "strengths": ["сильная сторона 1", ...],
+  "weaknesses": ["слабая сторона 1", ...],
+  "recommendations": ["рекомендация 1", ...]
+}""".trimIndent()
+    }
 
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) { json(json) }
@@ -60,10 +95,58 @@ class InternalCallEvaluator(
         return callLlmForExternalEvaluation(schema, transcription, criteria, scriptName)
     }
 
+    fun generateSuggestions(templateId: String, description: String): List<String> {
+        val typeLabel = when (templateId) {
+            "internal_eval" -> "внутренних звонков (между сотрудниками)"
+            "external_eval" -> "внешних звонков (менеджер — клиент)"
+            else -> "звонков"
+        }
+
+        val metaPrompt = """
+Ты помогаешь настроить систему оценки качества телефонных звонков.
+Пользователь хочет настроить инструкции для оценки $typeLabel.
+
+Описание от пользователя: "$description"
+
+Сгенерируй 3 варианта инструкций для оценки. Каждый вариант должен содержать:
+- Чёткие критерии оценки с описаниями
+- Указания на что обратить внимание
+- Просьбу написать краткое описание звонка
+
+НЕ включай в варианты: JSON-формат ответа, технические плейсхолдеры, текст транскрипции, слова "транскрипция" или "Проанализируй".
+Пиши только содержательную часть — что именно оценивать и как.
+
+Ответ строго в JSON:
+{"suggestions": ["вариант 1", "вариант 2", "вариант 3"]}
+""".trimIndent()
+
+        val responseJson = callLlmRaw(metaPrompt, temperature = 0.7)
+
+        return try {
+            val parsed = json.parseToJsonElement(responseJson) as kotlinx.serialization.json.JsonObject
+            val arr = parsed["suggestions"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+            arr.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+        } catch (e: Exception) {
+            log.error("Failed to parse suggestion response: {}", responseJson.take(500), e)
+            emptyList()
+        }
+    }
+
     private fun callLlmForInternalEvaluation(schema: String, transcription: String): String {
-        val template = getTemplate(schema, "internal_eval", PromptTemplateService.DEFAULT_INTERNAL_EVAL)
-        val prompt = template.replace("{transcription}", transcription)
-        return callLlm(schema, prompt)
+        val userInstructions = getUserInstructions(schema, "internal_eval", PromptTemplateService.DEFAULT_INTERNAL_INSTRUCTIONS)
+        val prompt = """
+Проанализируй следующий ВНУТРЕННИЙ телефонный разговор между сотрудниками компании.
+
+Транскрипция:
+---
+$transcription
+---
+
+$userInstructions
+
+$INTERNAL_JSON_FORMAT
+""".trimIndent()
+        return callLlm(prompt)
     }
 
     private fun callLlmForExternalEvaluation(
@@ -72,25 +155,37 @@ class InternalCallEvaluator(
         criteria: List<PipelineCriterionInput>,
         scriptName: String,
     ): String {
-        val template = getTemplate(schema, "external_eval", PromptTemplateService.DEFAULT_EXTERNAL_EVAL)
+        val userInstructions = getUserInstructions(schema, "external_eval", PromptTemplateService.DEFAULT_EXTERNAL_INSTRUCTIONS)
         val criteriaList = criteria.joinToString("\n") { "  ${it.id}. ${it.name}: ${it.description}" }
-        val prompt = template
-            .replace("{transcription}", transcription)
-            .replace("{criteria}", criteriaList)
-            .replace("{scriptName}", scriptName)
-        return callLlm(schema, prompt)
+        val prompt = """
+Проанализируй следующий разговор менеджера с клиентом по скрипту "$scriptName".
+
+Транскрипция:
+---
+$transcription
+---
+
+Критерии оценки:
+$criteriaList
+
+$userInstructions
+
+$EXTERNAL_JSON_FORMAT
+""".trimIndent()
+        return callLlm(prompt)
     }
 
-    private fun getTemplate(schema: String, id: String, fallback: String): String =
+    private fun getUserInstructions(schema: String, id: String, fallback: String): String =
         try {
             promptTemplateService?.getContent(schema, id)?.takeIf { it.isNotBlank() } ?: fallback
         } catch (e: Exception) {
-            log.warn("Failed to load template '{}' from DB for schema '{}', using default", id, schema, e)
+            log.warn("Failed to load instructions '{}' for schema '{}', using default", id, schema, e)
             fallback
         }
 
-    private fun callLlm(schema: String, prompt: String): String {
-        val systemPrompt = getTemplate(schema, "system", PromptTemplateService.DEFAULT_SYSTEM)
+    private fun callLlm(prompt: String): String = callLlmRaw(prompt, temperature = 0.1)
+
+    private fun callLlmRaw(prompt: String, temperature: Double = 0.1): String {
         return kotlinx.coroutines.runBlocking {
             val response = client.post("$llmBaseUrl/chat/completions") {
                 header("Authorization", "Bearer $llmApiKey")
@@ -98,11 +193,11 @@ class InternalCallEvaluator(
                 setBody(json.encodeToString(LlmRequest(
                     model = llmModel,
                     messages = listOf(
-                        LlmMessage("system", systemPrompt),
+                        LlmMessage("system", SYSTEM_PROMPT),
                         LlmMessage("user", prompt),
                     ),
                     responseFormat = LlmResponseFormat("json_object"),
-                    temperature = 0.1,
+                    temperature = temperature,
                     maxTokens = 4096,
                 )))
             }

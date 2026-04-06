@@ -5,3 +5,7 @@ export interface PromptTemplateResponse {
   content: string
   updatedAt: number
 }
+
+export interface SuggestResponse {
+  suggestions: string[]
+}
