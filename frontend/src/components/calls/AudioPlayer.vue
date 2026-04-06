@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Play, Pause, Volume2, VolumeX, AlertCircle } from 'lucide-vue-next'
 import client from '@/api/client'
 
@@ -19,6 +19,23 @@ const isLoading = ref(true)
 
 const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
+function attachListeners(audio: HTMLAudioElement) {
+  audio.addEventListener('loadedmetadata', () => {
+    duration.value = audio.duration
+    isLoading.value = false
+  })
+  audio.addEventListener('timeupdate', () => {
+    currentTime.value = audio.currentTime
+  })
+  audio.addEventListener('play', () => { isPlaying.value = true })
+  audio.addEventListener('pause', () => { isPlaying.value = false })
+  audio.addEventListener('ended', () => { isPlaying.value = false })
+  audio.addEventListener('error', () => {
+    hasError.value = true
+    isLoading.value = false
+  })
+}
+
 async function loadAudio() {
   try {
     const response = await client.get(`/api/v1/calls/${props.callId}/audio`, {
@@ -26,7 +43,18 @@ async function loadAudio() {
       timeout: 30_000,
     })
     const blob = response.data as Blob
+    if (!blob || blob.size === 0) {
+      hasError.value = true
+      isLoading.value = false
+      return
+    }
     blobUrl.value = URL.createObjectURL(blob)
+
+    await nextTick()
+    const audio = audioRef.value
+    if (audio) {
+      audio.load()
+    }
   } catch {
     hasError.value = true
     isLoading.value = false
@@ -67,26 +95,10 @@ function formatTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-onMounted(async () => {
-  await loadAudio()
-
+onMounted(() => {
   const audio = audioRef.value
-  if (!audio) return
-
-  audio.addEventListener('loadedmetadata', () => {
-    duration.value = audio.duration
-    isLoading.value = false
-  })
-  audio.addEventListener('timeupdate', () => {
-    currentTime.value = audio.currentTime
-  })
-  audio.addEventListener('play', () => { isPlaying.value = true })
-  audio.addEventListener('pause', () => { isPlaying.value = false })
-  audio.addEventListener('ended', () => { isPlaying.value = false })
-  audio.addEventListener('error', () => {
-    hasError.value = true
-    isLoading.value = false
-  })
+  if (audio) attachListeners(audio)
+  loadAudio()
 })
 
 onUnmounted(() => {
@@ -100,57 +112,57 @@ onUnmounted(() => {
     Запись недоступна или удалена
   </div>
 
-  <div v-else-if="isLoading && !blobUrl" class="flex items-center gap-2 text-sm text-gray-400 py-3">
-    <div class="w-4 h-4 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
-    Загрузка записи...
-  </div>
+  <div v-else>
+    <audio ref="audioRef" :src="blobUrl ?? undefined" preload="metadata" class="hidden" />
 
-  <div v-else class="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-    <audio ref="audioRef" :src="blobUrl ?? undefined" preload="metadata" />
+    <div v-if="isLoading" class="flex items-center gap-2 text-sm text-gray-400 py-3">
+      <div class="w-4 h-4 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
+      Загрузка записи...
+    </div>
 
-    <button
-      @click="togglePlay"
-      class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-      :disabled="isLoading"
-    >
-      <Pause v-if="isPlaying" class="w-4 h-4" />
-      <Play v-else class="w-4 h-4 ml-0.5" />
-    </button>
-
-    <span class="text-xs text-gray-500 tabular-nums w-10 text-right">{{ formatTime(currentTime) }}</span>
-
-    <input
-      type="range"
-      :min="0"
-      :max="duration || 0"
-      :value="currentTime"
-      step="0.1"
-      @input="seek"
-      class="flex-1 h-1.5 rounded-full appearance-none bg-gray-200 accent-primary-600 cursor-pointer"
-      :disabled="isLoading"
-    />
-
-    <span class="text-xs text-gray-500 tabular-nums w-10">{{ formatTime(duration) }}</span>
-
-    <button @click="toggleMute" class="text-gray-400 hover:text-gray-600 transition-colors">
-      <VolumeX v-if="isMuted" class="w-4 h-4" />
-      <Volume2 v-else class="w-4 h-4" />
-    </button>
-
-    <div class="flex gap-1">
+    <div v-else class="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
       <button
-        v-for="speed in speeds"
-        :key="speed"
-        @click="setSpeed(speed)"
-        :class="[
-          'text-xs px-1.5 py-0.5 rounded transition-colors',
-          playbackRate === speed
-            ? 'bg-primary-100 text-primary-700 font-medium'
-            : 'text-gray-400 hover:text-gray-600',
-        ]"
+        @click="togglePlay"
+        class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-primary-600 text-white hover:bg-primary-700 transition-colors"
       >
-        {{ speed }}x
+        <Pause v-if="isPlaying" class="w-4 h-4" />
+        <Play v-else class="w-4 h-4 ml-0.5" />
       </button>
+
+      <span class="text-xs text-gray-500 tabular-nums w-10 text-right">{{ formatTime(currentTime) }}</span>
+
+      <input
+        type="range"
+        :min="0"
+        :max="duration || 0"
+        :value="currentTime"
+        step="0.1"
+        @input="seek"
+        class="flex-1 h-1.5 rounded-full appearance-none bg-gray-200 accent-primary-600 cursor-pointer"
+      />
+
+      <span class="text-xs text-gray-500 tabular-nums w-10">{{ formatTime(duration) }}</span>
+
+      <button @click="toggleMute" class="text-gray-400 hover:text-gray-600 transition-colors">
+        <VolumeX v-if="isMuted" class="w-4 h-4" />
+        <Volume2 v-else class="w-4 h-4" />
+      </button>
+
+      <div class="flex gap-1">
+        <button
+          v-for="speed in speeds"
+          :key="speed"
+          @click="setSpeed(speed)"
+          :class="[
+            'text-xs px-1.5 py-0.5 rounded transition-colors',
+            playbackRate === speed
+              ? 'bg-primary-100 text-primary-700 font-medium'
+              : 'text-gray-400 hover:text-gray-600',
+          ]"
+        >
+          {{ speed }}x
+        </button>
+      </div>
     </div>
   </div>
 </template>

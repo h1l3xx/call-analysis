@@ -8,6 +8,7 @@ import com.malikov.service.AudioStorageService
 import com.malikov.service.CallService
 import io.ktor.http.*
 import io.ktor.http.content.*
+import io.ktor.server.http.content.LocalFileContent
 import io.ktor.server.application.call
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -251,9 +252,7 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
             }
 
             log.info("Serving audio: key={}, size={}, type={}", audioKey, audioFile.length(), contentType)
-            call.response.header(HttpHeaders.ContentType, contentType.toString())
-            call.response.header(HttpHeaders.AcceptRanges, "bytes")
-            call.respondFile(audioFile)
+            call.respond(LocalFileContent(audioFile, contentType))
         }
     }
 }
