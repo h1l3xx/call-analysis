@@ -136,7 +136,12 @@ class ASREngine:
                 "condition_on_previous_text": False,
             }
 
-            # Initial prompt (если указан)
+            if self.config.vad_filter:
+                transcribe_params["vad_parameters"] = {
+                    "min_silence_duration_ms": 500,
+                    "speech_pad_ms": 300,
+                }
+
             if self.config.initial_prompt:
                 transcribe_params["initial_prompt"] = self.config.initial_prompt
 

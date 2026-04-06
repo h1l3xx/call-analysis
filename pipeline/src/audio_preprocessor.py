@@ -32,18 +32,26 @@ class AudioPreprocessor:
         self.preprocessing_config = config.preprocessing
         self.target_sr = self.preprocessing_config.target_sample_rate
 
-        # Wake-signal: громкий сигнал для улучшения распознавания начала
-        if self.preprocessing_config.wake_signal["enabled"]:
+        wake_cfg = self.preprocessing_config.wake_signal
+        use_wake = wake_cfg["enabled"] and not config.vad_filter
+        if wake_cfg["enabled"] and config.vad_filter:
+            logger.warning(
+                "Wake-signal отключен: несовместим с vad_filter=true "
+                "(шум сбивает детектор начала речи)"
+            )
+
+        if use_wake:
             self.wake_signal = self._generate_wake_signal(
-                samples=self.preprocessing_config.wake_signal["samples"],
-                target_rms=self.preprocessing_config.wake_signal["rms"],
+                samples=wake_cfg["samples"],
+                target_rms=wake_cfg["rms"],
             )
         else:
             self.wake_signal = None
 
         logger.info(
             f"✓ AudioPreprocessor инициализирован: SR={self.target_sr}, "
-            f"wake_signal={'enabled' if self.wake_signal is not None else 'disabled'}"
+            f"wake_signal={'enabled' if self.wake_signal is not None else 'disabled'}, "
+            f"vad_filter={config.vad_filter}"
         )
         
         # Статистика форматов (для мониторинга источников)

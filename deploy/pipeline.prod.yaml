@@ -15,7 +15,7 @@ asr:
 
   preprocessing:
     wake_signal:
-      enabled: true
+      enabled: false
       samples: 8000
       rms: 0.0504
     normalize_volume: true
