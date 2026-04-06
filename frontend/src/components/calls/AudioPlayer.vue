@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Play, Pause, Volume2, VolumeX, AlertCircle } from 'lucide-vue-next'
-import client from '@/api/client'
 
 const props = defineProps<{
   callId: string
@@ -17,39 +16,6 @@ const hasError = ref(false)
 const isLoading = ref(true)
 
 const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
-
-let objectUrl: string | null = null
-
-async function loadAudio() {
-  const audio = audioRef.value
-  if (!audio) {
-    hasError.value = true
-    isLoading.value = false
-    return
-  }
-
-  try {
-    const response = await client.get(`/api/v1/calls/${props.callId}/audio`, {
-      responseType: 'arraybuffer',
-      timeout: 30_000,
-    })
-    const buf = response.data as ArrayBuffer
-    if (!buf || buf.byteLength === 0) {
-      hasError.value = true
-      isLoading.value = false
-      return
-    }
-    const mime = response.headers['content-type'] || 'audio/mpeg'
-    const blob = new Blob([buf], { type: mime })
-
-    objectUrl = URL.createObjectURL(blob)
-    audio.src = objectUrl
-    audio.load()
-  } catch {
-    hasError.value = true
-    isLoading.value = false
-  }
-}
 
 function togglePlay() {
   if (!audioRef.value) return
@@ -104,11 +70,10 @@ onMounted(() => {
     isLoading.value = false
   })
 
-  loadAudio()
-})
-
-onUnmounted(() => {
-  if (objectUrl) URL.revokeObjectURL(objectUrl)
+  const token = localStorage.getItem('access_token')
+  const base = import.meta.env.VITE_API_URL || ''
+  audio.src = `${base}/api/v1/calls/${props.callId}/audio?token=${token}`
+  audio.load()
 })
 </script>
 

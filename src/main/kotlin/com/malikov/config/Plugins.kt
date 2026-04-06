@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.malikov.auth.UserPrincipal
 import io.ktor.http.*
+import io.ktor.http.auth.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -63,6 +64,15 @@ fun Application.configureAuth(config: JwtConfig) {
 
     install(Authentication) {
         jwt("jwt") {
+            authHeader { call ->
+                val header = call.request.headers[HttpHeaders.Authorization]
+                if (header != null) {
+                    try { parseAuthorizationHeader(header) } catch (_: Exception) { null }
+                } else {
+                    call.request.queryParameters["token"]
+                        ?.let { HttpAuthHeader.Single("Bearer", it) }
+                }
+            }
             verifier(
                 JWT.require(algorithm)
                     .withIssuer(config.issuer)

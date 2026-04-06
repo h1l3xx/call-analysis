@@ -8,7 +8,6 @@ import com.malikov.service.AudioStorageService
 import com.malikov.service.CallService
 import io.ktor.http.*
 import io.ktor.http.content.*
-import io.ktor.server.http.content.LocalFileContent
 import io.ktor.server.application.call
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -240,19 +239,8 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
             val audioFile = audioStorage.getFile(audioKey)
                 ?: throw NotFoundException("Аудиофайл удалён")
 
-            val contentType = when (audioKey.substringAfterLast('.').lowercase()) {
-                "mp3"  -> ContentType.Audio.MPEG
-                "wav"  -> ContentType("audio", "wav")
-                "ogg"  -> ContentType.Audio.OGG
-                "flac" -> ContentType("audio", "flac")
-                "m4a"  -> ContentType("audio", "mp4")
-                "webm" -> ContentType("audio", "webm")
-                "opus" -> ContentType("audio", "opus")
-                else   -> ContentType.Application.OctetStream
-            }
-
-            log.info("Serving audio: key={}, size={}, type={}", audioKey, audioFile.length(), contentType)
-            call.respond(LocalFileContent(audioFile, contentType))
+            log.info("Serving audio: key={}, size={}", audioKey, audioFile.length())
+            call.respondFile(audioFile)
         }
     }
 }
