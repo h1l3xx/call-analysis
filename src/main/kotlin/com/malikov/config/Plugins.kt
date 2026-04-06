@@ -49,6 +49,9 @@ private fun Application.configureCors() {
         allowMethod(HttpMethod.Delete)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
+        exposeHeader(HttpHeaders.ContentType)
+        exposeHeader(HttpHeaders.ContentLength)
+        exposeHeader(HttpHeaders.AcceptRanges)
         allowCredentials = true
         // В продакшене заменить на конкретный домен
         anyHost()

@@ -39,15 +39,17 @@ function attachListeners(audio: HTMLAudioElement) {
 async function loadAudio() {
   try {
     const response = await client.get(`/api/v1/calls/${props.callId}/audio`, {
-      responseType: 'blob',
+      responseType: 'arraybuffer',
       timeout: 30_000,
     })
-    const blob = response.data as Blob
-    if (!blob || blob.size === 0) {
+    const buf = response.data as ArrayBuffer
+    if (!buf || buf.byteLength === 0) {
       hasError.value = true
       isLoading.value = false
       return
     }
+    const mime = response.headers['content-type'] || 'audio/mpeg'
+    const blob = new Blob([buf], { type: mime })
     blobUrl.value = URL.createObjectURL(blob)
 
     await nextTick()
@@ -113,7 +115,7 @@ onUnmounted(() => {
   </div>
 
   <div v-else>
-    <audio ref="audioRef" :src="blobUrl ?? undefined" preload="metadata" class="hidden" />
+    <audio ref="audioRef" :src="blobUrl ?? undefined" preload="metadata" />
 
     <div v-if="isLoading" class="flex items-center gap-2 text-sm text-gray-400 py-3">
       <div class="w-4 h-4 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
