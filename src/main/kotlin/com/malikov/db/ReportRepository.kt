@@ -184,8 +184,36 @@ class ReportRepository {
     }
 
     fun tenantStats(schema: String, sinceMs: Long): TenantStats = transaction {
-        val d = TDepartments(schema)
+        val cl = TCalls(schema)
+        val qs = TQualityScores(schema)
+        val prevSinceMs = sinceMs - (System.currentTimeMillis() - sinceMs)
 
+        val allCalls = cl.selectAll()
+            .where { cl.createdAt greaterEq sinceMs }
+            .toList()
+
+        val totalCalls = allCalls.size.toLong()
+        val doneCalls = allCalls.count { it[cl.status] == "done" }.toLong()
+        val failedCalls = allCalls.count { it[cl.status] == "failed" }.toLong()
+        val internalCalls = allCalls.count { it[cl.callType] == "internal" }.toLong()
+        val externalCalls = totalCalls - internalCalls
+
+        val doneCallIds = allCalls.filter { it[cl.status] == "done" }.map { it[cl.id] }
+        val scores = if (doneCallIds.isNotEmpty()) {
+            qs.selectAll()
+                .where { qs.callId inList doneCallIds }
+                .mapNotNull { it[qs.overallScore] }
+        } else emptyList()
+
+        val prevScores = if (doneCallIds.isNotEmpty()) {
+            val prevCallIds = cl.join(qs, JoinType.INNER, cl.id, qs.callId)
+                .selectAll()
+                .where { (cl.createdAt greaterEq prevSinceMs) and (cl.createdAt less sinceMs) }
+                .mapNotNull { it[qs.overallScore] }
+            prevCallIds
+        } else emptyList()
+
+        val d = TDepartments(schema)
         val departments = d.selectAll()
             .where { d.isActive eq true }
             .map { it[d.id] }
@@ -194,17 +222,14 @@ class ReportRepository {
             departmentStats(schema, deptId, sinceMs)
         }
 
-        val allAvgs = deptStats.mapNotNull { it.avgScore }
-        val prevAvgs = deptStats.mapNotNull { it.prevAvgScore }
-
         TenantStats(
-            totalCalls = deptStats.sumOf { it.totalCalls },
-            doneCalls = deptStats.sumOf { it.doneCalls },
-            failedCalls = deptStats.sumOf { it.failedCalls },
-            internalCalls = deptStats.sumOf { it.internalCalls },
-            externalCalls = deptStats.sumOf { it.externalCalls },
-            avgScore = allAvgs.takeIf { it.isNotEmpty() }?.average(),
-            prevAvgScore = prevAvgs.takeIf { it.isNotEmpty() }?.average(),
+            totalCalls = totalCalls,
+            doneCalls = doneCalls,
+            failedCalls = failedCalls,
+            internalCalls = internalCalls,
+            externalCalls = externalCalls,
+            avgScore = scores.takeIf { it.isNotEmpty() }?.average(),
+            prevAvgScore = prevScores.takeIf { it.isNotEmpty() }?.average(),
             departments = deptStats.sortedByDescending { it.avgScore ?: 0.0 },
         )
     }
