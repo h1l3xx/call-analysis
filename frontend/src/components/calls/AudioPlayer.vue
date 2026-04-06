@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Play, Pause, Volume2, VolumeX, AlertCircle } from 'lucide-vue-next'
 import client from '@/api/client'
 
@@ -8,7 +8,6 @@ const props = defineProps<{
 }>()
 
 const audioRef = ref<HTMLAudioElement | null>(null)
-const blobUrl = ref<string | null>(null)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
@@ -19,24 +18,16 @@ const isLoading = ref(true)
 
 const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
-function attachListeners(audio: HTMLAudioElement) {
-  audio.addEventListener('loadedmetadata', () => {
-    duration.value = audio.duration
-    isLoading.value = false
-  })
-  audio.addEventListener('timeupdate', () => {
-    currentTime.value = audio.currentTime
-  })
-  audio.addEventListener('play', () => { isPlaying.value = true })
-  audio.addEventListener('pause', () => { isPlaying.value = false })
-  audio.addEventListener('ended', () => { isPlaying.value = false })
-  audio.addEventListener('error', () => {
-    hasError.value = true
-    isLoading.value = false
-  })
-}
+let objectUrl: string | null = null
 
 async function loadAudio() {
+  const audio = audioRef.value
+  if (!audio) {
+    hasError.value = true
+    isLoading.value = false
+    return
+  }
+
   try {
     const response = await client.get(`/api/v1/calls/${props.callId}/audio`, {
       responseType: 'arraybuffer',
@@ -50,13 +41,10 @@ async function loadAudio() {
     }
     const mime = response.headers['content-type'] || 'audio/mpeg'
     const blob = new Blob([buf], { type: mime })
-    blobUrl.value = URL.createObjectURL(blob)
 
-    await nextTick()
-    const audio = audioRef.value
-    if (audio) {
-      audio.load()
-    }
+    objectUrl = URL.createObjectURL(blob)
+    audio.src = objectUrl
+    audio.load()
   } catch {
     hasError.value = true
     isLoading.value = false
@@ -99,12 +87,28 @@ function formatTime(sec: number): string {
 
 onMounted(() => {
   const audio = audioRef.value
-  if (audio) attachListeners(audio)
+  if (!audio) return
+
+  audio.addEventListener('loadedmetadata', () => {
+    duration.value = audio.duration
+    isLoading.value = false
+  })
+  audio.addEventListener('timeupdate', () => {
+    currentTime.value = audio.currentTime
+  })
+  audio.addEventListener('play', () => { isPlaying.value = true })
+  audio.addEventListener('pause', () => { isPlaying.value = false })
+  audio.addEventListener('ended', () => { isPlaying.value = false })
+  audio.addEventListener('error', () => {
+    hasError.value = true
+    isLoading.value = false
+  })
+
   loadAudio()
 })
 
 onUnmounted(() => {
-  if (blobUrl.value) URL.revokeObjectURL(blobUrl.value)
+  if (objectUrl) URL.revokeObjectURL(objectUrl)
 })
 </script>
 
@@ -115,7 +119,7 @@ onUnmounted(() => {
   </div>
 
   <div v-else>
-    <audio ref="audioRef" :src="blobUrl ?? undefined" preload="metadata" />
+    <audio ref="audioRef" preload="none" />
 
     <div v-if="isLoading" class="flex items-center gap-2 text-sm text-gray-400 py-3">
       <div class="w-4 h-4 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
