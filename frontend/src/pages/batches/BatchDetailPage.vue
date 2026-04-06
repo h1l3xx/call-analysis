@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { ArrowLeft, RefreshCw, Phone, Building, Download } from 'lucide-vue-next'
+import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { batchesApi } from '@/api'
 import type { BatchResponse, BatchSummaryResponse, CallResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
@@ -419,6 +419,24 @@ function openCallsModal(title: string, callIds: string[]) {
               </RouterLink>
             </tbody>
           </table>
+        </div>
+
+        <div v-if="callsTotalPages > 1" class="flex items-center justify-center gap-2 mt-3">
+          <button
+            :disabled="callsPage <= 1"
+            class="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="callsPage--; fetchCalls()"
+          >
+            <ChevronLeft class="w-4 h-4" />
+          </button>
+          <span class="text-sm text-gray-600">{{ callsPage }} / {{ callsTotalPages }}</span>
+          <button
+            :disabled="callsPage >= callsTotalPages"
+            class="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="callsPage++; fetchCalls()"
+          >
+            <ChevronRight class="w-4 h-4" />
+          </button>
         </div>
       </div>
     </template>
