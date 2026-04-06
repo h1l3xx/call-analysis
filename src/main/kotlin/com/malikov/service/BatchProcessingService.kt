@@ -126,11 +126,18 @@ class BatchProcessingService(
             log.info("Call {} transcribed (result_id={})", callId, response.resultId)
             callId
         } catch (e: PipelineException) {
-            log.error("Transcription failed for call {}: [{}] {}", callId, e.statusCode, e.detail)
-            resultWriter.markFailed(schema, callId, "transcription", "Pipeline [${e.statusCode}]: ${e.detail}")
-            batchRepo.incrementProcessed(schema, batchId)
-            AppMetrics.callsFailed.increment()
-            null
+            if (e.statusCode == 422) {
+                log.info("Call {} skipped (no speech / bad audio): {}", callId, e.detail)
+                resultWriter.markNoSpeech(schema, callId, e.detail ?: "Audio could not be processed")
+                batchRepo.incrementProcessed(schema, batchId)
+                null
+            } else {
+                log.error("Transcription failed for call {}: [{}] {}", callId, e.statusCode, e.detail)
+                resultWriter.markFailed(schema, callId, "transcription", "Pipeline [${e.statusCode}]: ${e.detail}")
+                batchRepo.incrementProcessed(schema, batchId)
+                AppMetrics.callsFailed.increment()
+                null
+            }
         } catch (e: Exception) {
             log.error("Transcription error for call {}", callId, e)
             resultWriter.markFailed(schema, callId, "transcription", e.message ?: "Unknown error")

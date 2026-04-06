@@ -135,7 +135,10 @@ const tabs = [
           Обработка... Автообновление каждые 5 сек
         </div>
 
-        <div v-if="call.errorMessage" class="mt-4 bg-red-50 text-red-700 text-sm rounded-lg px-4 py-3">
+        <div v-if="call.status === 'no_speech'" class="mt-4 bg-gray-50 text-gray-600 text-sm rounded-lg px-4 py-3">
+          В записи не обнаружена речь — звонок пропущен.
+        </div>
+        <div v-else-if="call.errorMessage" class="mt-4 bg-red-50 text-red-700 text-sm rounded-lg px-4 py-3">
           <strong>Ошибка ({{ call.failedStep }}):</strong> {{ call.errorMessage }}
         </div>
       </div>

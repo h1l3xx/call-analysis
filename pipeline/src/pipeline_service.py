@@ -137,8 +137,8 @@ class CallAnalysisPipeline:
                 word_timestamps=use_diarization,
             )
 
-            if not raw_transcription:
-                raise ValueError(f"Пустая транскрипция для {source_name}")
+            if not raw_transcription or not raw_transcription.strip():
+                raise ValueError(f"NO_SPEECH: Тишина / нет речи в записи {source_name}")
 
             speaker_turns_data: list[dict] | None = None
             speaker_metrics_data: dict | None = None

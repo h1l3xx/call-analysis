@@ -83,13 +83,18 @@ class PipelineService(
             }
 
         } catch (e: PipelineException) {
-            log.error("Pipeline error for call {}: [{}] {}", callId, e.statusCode, e.detail)
-            resultWriter.markFailed(
-                schema       = schema,
-                callId       = callId,
-                failedStep   = "pipeline_analyze",
-                errorMessage = "Pipeline [${e.statusCode}]: ${e.detail}",
-            )
+            if (e.statusCode == 422) {
+                log.info("Call {} skipped (no speech / bad audio): {}", callId, e.detail)
+                resultWriter.markNoSpeech(schema, callId, e.detail)
+            } else {
+                log.error("Pipeline error for call {}: [{}] {}", callId, e.statusCode, e.detail)
+                resultWriter.markFailed(
+                    schema       = schema,
+                    callId       = callId,
+                    failedStep   = "pipeline_analyze",
+                    errorMessage = "Pipeline [${e.statusCode}]: ${e.detail}",
+                )
+            }
 
         } catch (e: Exception) {
             log.error("Unexpected error processing call {}", callId, e)

@@ -29,6 +29,7 @@ const statusOptions = [
   { value: 'transcribed_only', label: 'Транскрибирован' },
   { value: 'analyzing', label: 'Анализ' },
   { value: 'done', label: 'Готово' },
+  { value: 'no_speech', label: 'Тишина' },
   { value: 'failed', label: 'Ошибка' },
 ]
 

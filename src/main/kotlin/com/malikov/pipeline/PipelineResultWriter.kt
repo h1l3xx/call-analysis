@@ -66,6 +66,16 @@ class PipelineResultWriter {
         log.warn("Call {} marked as failed at step '{}': {}", callId, failedStep, errorMessage)
     }
 
+    fun markNoSpeech(schema: String, callId: UUID, reason: String) = transaction {
+        val cl = TCalls(schema)
+        cl.update({ cl.id eq callId }) {
+            it[cl.status] = "no_speech"
+            it[cl.errorMessage] = reason.take(2000)
+            it[cl.finishedAt] = System.currentTimeMillis()
+        }
+        log.info("Call {} marked as no_speech: {}", callId, reason)
+    }
+
     fun markProcessing(schema: String, callId: UUID) = transaction {
         val cl = TCalls(schema)
         cl.update({ cl.id eq callId }) {

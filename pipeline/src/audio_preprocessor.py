@@ -68,104 +68,79 @@ class AudioPreprocessor:
             Path: Путь к сырому аудио (оригинальный или декодированный)
             
         Raises:
-            ValueError: Если формат не поддерживается
+            ValueError: Если файл — JSON, но аудио из него извлечь невозможно
         """
-        try:
-            # Читаем первые 200 байт для определения формата
-            with open(file_path, 'rb') as f:
-                header = f.read(200)
+        with open(file_path, 'rb') as f:
+            header = f.read(200)
+        
+        # Проверка 1: Начинается с { или [ → вероятно JSON-wrapped audio
+        if header.strip().startswith((b'{', b'[')):
+            logger.info(f"Обнаружен JSON-wrapped audio: {file_path.name}")
+            return self._decode_json_audio(file_path)
+        
+        # Проверка 2: Стандартные аудио-заголовки
+        is_mp3 = (header[0:1] == b'\xff' and len(header) > 1 and 
+                 (header[1] & 0xE0) == 0xE0)
+        
+        if (header.startswith(b'ID3') or 
+            is_mp3 or
+            header.startswith(b'RIFF') or
+            header.startswith(b'OggS') or
+            header.startswith(b'fLaC') or
+            b'ftyp' in header[:20]):
             
-            # Проверка 1: Начинается с { или [ → вероятно JSON
-            if header.strip().startswith((b'{', b'[')):
-                logger.info(f"🔍 Обнаружен JSON-wrapped audio: {file_path.name}")
-                
-                try:
-                    # Читаем весь файл как JSON
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    
-                    # Извлекаем base64 данные
-                    if 'data' in data and isinstance(data['data'], str):
-                        b64_audio = data['data']
-                        
-                        # ⭐ ВАЛИДАЦИЯ: Проверка на пустое поле
-                        if not b64_audio or len(b64_audio.strip()) == 0:
-                            logger.error(
-                                f"JSON содержит пустое поле 'data' (no audio): "
-                                f"{data.get('filename', 'unknown')}"
-                            )
-                            raise ValueError("CORRUPTED_AUDIO: Empty data field in JSON")
-                        
-                        # Декодируем base64 → binary audio
-                        try:
-                            audio_bytes = base64.b64decode(b64_audio)
-                            
-                            # Создаём временный файл с правильным расширением
-                            temp_file = tempfile.NamedTemporaryFile(
-                                suffix=".mp3", 
-                                delete=False,
-                                dir=tempfile.gettempdir()
-                            )
-                            temp_file.write(audio_bytes)
-                            temp_file.close()
-                            
-                            logger.info(
-                                f"✅ JSON декодирован: {len(b64_audio)} chars → "
-                                f"{len(audio_bytes)} bytes → {temp_file.name}"
-                            )
-                            
-                            # Статистика
-                            self.format_stats["json_wrapped"] += 1
-                            self.format_stats["decoded_files"] += 1
-                            
-                            return Path(temp_file.name)
-                            
-                        except Exception as decode_error:
-                            logger.error(f"Ошибка base64 декодирования: {decode_error}")
-                            raise ValueError(f"CORRUPTED_AUDIO: Invalid base64 in JSON")
-                    
-                    else:
-                        logger.warning(f"JSON не содержит поле 'data': {list(data.keys())}")
-                        raise ValueError(f"CORRUPTED_AUDIO: JSON missing 'data' field")
-                        
-                except json.JSONDecodeError as e:
-                    logger.error(f"Невалидный JSON: {e}")
-                    raise ValueError(f"CORRUPTED_AUDIO: Invalid JSON format")
-            
-            # Проверка 2: Стандартные аудио-заголовки
-            # MP3: FF Fx (где x = E/F/FB/F3/F2...) или ID3
-            # WAV: RIFF
-            # M4A: ftyp
-            # OGG: OggS
-            # FLAC: fLaC
-            
-            # MP3: проверяем первый байт FF и второй байт E0-FF (MPEG sync)
-            is_mp3 = (header[0:1] == b'\xff' and len(header) > 1 and 
-                     (header[1] & 0xE0) == 0xE0)
-            
-            if (header.startswith(b'ID3') or 
-                is_mp3 or
-                header.startswith(b'RIFF') or
-                header.startswith(b'OggS') or
-                header.startswith(b'fLaC') or
-                b'ftyp' in header[:20]):
-                
-                logger.debug(f"Стандартный аудиофайл: {file_path.name}")
-                self.format_stats["raw_audio"] += 1
-                return file_path
-            
-            # Неизвестный формат - пытаемся обработать как обычный
-            logger.warning(
-                f"⚠️ Неизвестный формат файла: {file_path.name}, "
-                f"header: {header[:20].hex()}"
-            )
+            logger.debug(f"Стандартный аудиофайл: {file_path.name}")
             self.format_stats["raw_audio"] += 1
             return file_path
-            
+        
+        # Неизвестный формат - пытаемся обработать как обычный
+        logger.warning(
+            f"Неизвестный формат файла: {file_path.name}, "
+            f"header: {header[:20].hex()}, size: {file_path.stat().st_size} bytes"
+        )
+        self.format_stats["raw_audio"] += 1
+        return file_path
+
+    def _decode_json_audio(self, file_path: Path) -> Path:
+        """Извлечь base64-encoded аудио из JSON-файла. Бросает ValueError при неудаче."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"CORRUPTED_AUDIO: Invalid JSON format: {e}")
+        
+        if not ('data' in data and isinstance(data['data'], str)):
+            raise ValueError(
+                f"CORRUPTED_AUDIO: JSON missing 'data' field, keys={list(data.keys())}"
+            )
+        
+        b64_audio = data['data']
+        if not b64_audio or not b64_audio.strip():
+            raise ValueError("CORRUPTED_AUDIO: Empty data field in JSON")
+        
+        try:
+            audio_bytes = base64.b64decode(b64_audio)
         except Exception as e:
-            # В случае ошибки детекции - пробуем обработать как обычный файл
-            logger.warning(f"Ошибка определения формата {file_path.name}: {e}")
-            return file_path
+            raise ValueError(f"CORRUPTED_AUDIO: Invalid base64: {e}")
+        
+        if len(audio_bytes) < 100:
+            raise ValueError(
+                f"CORRUPTED_AUDIO: Decoded audio too small ({len(audio_bytes)} bytes)"
+            )
+        
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix=".mp3", delete=False, dir=tempfile.gettempdir()
+        )
+        temp_file.write(audio_bytes)
+        temp_file.close()
+        
+        logger.info(
+            f"JSON декодирован: {len(b64_audio)} chars -> "
+            f"{len(audio_bytes)} bytes -> {temp_file.name}"
+        )
+        self.format_stats["json_wrapped"] += 1
+        self.format_stats["decoded_files"] += 1
+        return Path(temp_file.name)
 
     def _generate_wake_signal(self, samples: int, target_rms: float) -> np.ndarray:
         """
@@ -274,13 +249,22 @@ class AudioPreprocessor:
 
             return temp_file.name
 
-        except (ZeroDivisionError, ValueError) as e:
-            # Битый/повреждённый аудиофайл
-            logger.error(f"⚠️ Битый аудиофайл {input_path_obj.name}: {e}")
-            raise ValueError(f"CORRUPTED_AUDIO: {e}") from e
+        except ValueError as e:
+            logger.error(
+                f"Аудио не прошло валидацию {input_path_obj.name}: {e}",
+                exc_info=True,
+            )
+            raise
         except Exception as e:
-            logger.error(f"Ошибка предобработки аудио {input_path}: {e}")
-            raise ValueError(f"Не удалось обработать аудио: {e}") from e
+            detail = str(e) or type(e).__name__
+            logger.error(
+                f"Ошибка предобработки аудио {input_path_obj.name} "
+                f"[{type(e).__name__}]: {detail}",
+                exc_info=True,
+            )
+            raise ValueError(
+                f"Не удалось обработать аудио [{type(e).__name__}]: {detail}"
+            ) from e
 
     def get_audio_duration(self, audio_path: str) -> Optional[float]:
         """
@@ -313,6 +297,9 @@ class AudioPreprocessor:
             return duration
             
         except Exception as e:
-            logger.warning(f"Не удалось получить длительность {audio_path}: {e}")
+            logger.warning(
+                f"Не удалось получить длительность {audio_path} [{type(e).__name__}]: {e}",
+                exc_info=True,
+            )
             return None
 

@@ -1,4 +1,4 @@
-export type CallStatus = 'queued' | 'processing' | 'transcribed_only' | 'pending_review' | 'analyzing' | 'done' | 'failed'
+export type CallStatus = 'queued' | 'processing' | 'transcribed_only' | 'pending_review' | 'analyzing' | 'done' | 'no_speech' | 'failed'
 
 export interface CreateCallRequest {
   managerId: string

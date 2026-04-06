@@ -7,7 +7,7 @@ import RecentCallsList from '@/components/dashboard/RecentCallsList.vue'
 
 const loading = ref(true)
 const recentCalls = ref<CallResponse[]>([])
-const stats = ref({ total: 0, processing: 0, done: 0, failed: 0 })
+const stats = ref({ total: 0, processing: 0, done: 0, failed: 0, noSpeech: 0 })
 
 onMounted(async () => {
   try {

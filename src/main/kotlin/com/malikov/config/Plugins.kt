@@ -8,8 +8,10 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.server.plugins.autohead.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.plugins.partialcontent.*
 import io.ktor.server.plugins.requestvalidation.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
@@ -19,6 +21,8 @@ import mu.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 fun Application.configurePlugins(config: AppConfig) {
+    install(AutoHeadResponse)
+    install(PartialContent) { maxRangeCount = 10 }
     configureContentNegotiation()
     configureCors()
     configureAuth(config.jwt)

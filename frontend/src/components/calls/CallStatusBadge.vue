@@ -12,6 +12,7 @@ const config = computed(() => {
     pending_review: { label: 'На проверке', classes: 'bg-yellow-100 text-yellow-700' },
     analyzing: { label: 'Анализ', classes: 'bg-purple-100 text-purple-700' },
     done: { label: 'Готово', classes: 'bg-green-100 text-green-700' },
+    no_speech: { label: 'Тишина', classes: 'bg-gray-100 text-gray-500' },
     failed: { label: 'Ошибка', classes: 'bg-red-100 text-red-700' },
   }
   return map[props.status] || { label: props.status, classes: 'bg-gray-100 text-gray-700' }

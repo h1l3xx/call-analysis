@@ -22,13 +22,21 @@ class AudioStorageService(private val basePath: String) {
      */
     fun save(schema: String, callId: UUID, ext: String, sourceFile: File): String {
         val schemaDir = File(basePath, schema)
-        if (!schemaDir.exists()) schemaDir.mkdirs()
+        if (!schemaDir.exists()) {
+            val created = schemaDir.mkdirs()
+            log.info("Created audio dir {}: success={}", schemaDir.absolutePath, created)
+        }
 
         val relativePath = "$schema/$callId.$ext"
         val target = File(basePath, relativePath)
 
+        if (!sourceFile.exists()) {
+            log.error("Source audio file does not exist: {}", sourceFile.absolutePath)
+            throw IllegalStateException("Source audio file does not exist: ${sourceFile.absolutePath}")
+        }
+
         sourceFile.copyTo(target, overwrite = true)
-        log.debug("Audio saved: {} ({} bytes)", relativePath, target.length())
+        log.info("Audio saved: {} ({} bytes)", relativePath, target.length())
         return relativePath
     }
 

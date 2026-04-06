@@ -157,6 +157,15 @@ def create_app(
             _require_api_key_if_needed(config, x_api_key)
             _enforce_rate_limit(request, config)
             temp_dir, temp_path, safe_name = await _save_upload_to_temp_file(file, config)
+
+            file_size = temp_path.stat().st_size
+            with open(temp_path, 'rb') as f:
+                header_hex = f.read(16).hex()
+            logger.info(
+                "Analyze request: file=%s, size=%d bytes, header=%s",
+                safe_name, file_size, header_hex,
+            )
+
             result = await asyncio.to_thread(
                 request.app.state.pipeline.analyze_file,
                 temp_path,
@@ -169,7 +178,7 @@ def create_app(
         except HTTPException:
             raise
         except ValueError as exc:
-            logger.warning("Upload rejected or audio invalid: %s", exc)
+            logger.warning("Upload rejected or audio invalid: %s", exc, exc_info=True)
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
             logger.error("Unhandled error during web analysis", exc_info=True)

@@ -13,8 +13,11 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
+
+private val log = LoggerFactory.getLogger("CallRoutes")
 
 private val ALLOWED_AUDIO_EXTENSIONS = setOf("wav", "mp3", "ogg", "flac", "m4a", "webm", "opus")
 private const val MAX_AUDIO_SIZE_BYTES = 100L * 1024 * 1024  // 100 MB
@@ -238,15 +241,18 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
 
             val contentType = when (audioKey.substringAfterLast('.').lowercase()) {
                 "mp3"  -> ContentType.Audio.MPEG
-                "wav"  -> ContentType.Audio.Any
+                "wav"  -> ContentType("audio", "wav")
                 "ogg"  -> ContentType.Audio.OGG
-                "flac" -> ContentType.Audio.Any
-                "m4a"  -> ContentType.Audio.Any
+                "flac" -> ContentType("audio", "flac")
+                "m4a"  -> ContentType("audio", "mp4")
                 "webm" -> ContentType("audio", "webm")
                 "opus" -> ContentType("audio", "opus")
                 else   -> ContentType.Application.OctetStream
             }
 
+            log.info("Serving audio: key={}, size={}, type={}", audioKey, audioFile.length(), contentType)
+            call.response.header(HttpHeaders.ContentType, contentType.toString())
+            call.response.header(HttpHeaders.AcceptRanges, "bytes")
             call.respondFile(audioFile)
         }
     }

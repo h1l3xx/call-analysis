@@ -46,7 +46,7 @@ class BatchNotificationService(
                 (Tenants.dbSchema eq schema) and
                 Users.telegramChatId.isNotNull() and
                 Users.isActive.eq(true) and
-                (Users.role inList listOf("CLIENT_ADMIN", "TEAM_LEAD"))
+                (Users.role.castTo<String>(TextColumnType()) inList listOf("CLIENT_ADMIN", "TEAM_LEAD"))
             }
             .map { row -> row[Users.telegramChatId]!! to row[Users.fullName] }
     }

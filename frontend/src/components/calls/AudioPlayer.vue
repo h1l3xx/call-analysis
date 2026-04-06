@@ -23,7 +23,7 @@ async function loadAudio() {
   try {
     const response = await client.get(`/api/v1/calls/${props.callId}/audio`, {
       responseType: 'blob',
-      timeout: 120_000,
+      timeout: 30_000,
     })
     const blob = response.data as Blob
     blobUrl.value = URL.createObjectURL(blob)
@@ -98,6 +98,11 @@ onUnmounted(() => {
   <div v-if="hasError" class="flex items-center gap-2 text-sm text-gray-400 py-2">
     <AlertCircle class="w-4 h-4" />
     Запись недоступна или удалена
+  </div>
+
+  <div v-else-if="isLoading && !blobUrl" class="flex items-center gap-2 text-sm text-gray-400 py-3">
+    <div class="w-4 h-4 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
+    Загрузка записи...
   </div>
 
   <div v-else class="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">

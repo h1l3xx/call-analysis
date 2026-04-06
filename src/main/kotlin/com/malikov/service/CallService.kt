@@ -7,6 +7,7 @@ import com.malikov.pipeline.PipelineCriterionInput
 import com.malikov.pipeline.PipelineSpeakerTurn
 import com.malikov.pipeline.PipelineService
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
 
@@ -19,6 +20,7 @@ class CallService(
     private val batchProcessingService: BatchProcessingService,
     private val audioStorage: AudioStorageService,
 ) {
+    private val log = LoggerFactory.getLogger(CallService::class.java)
 
     fun list(
         schema: String,
@@ -103,7 +105,9 @@ class CallService(
         try {
             val audioKey = audioStorage.save(schema, callId, ext, audioFile)
             callRepo.updateAudioKey(schema, callId, audioKey)
-        } catch (_: Exception) { /* non-critical: playback unavailable but processing continues */ }
+        } catch (e: Exception) {
+            log.error("Failed to save audio for call {} (schema={}): {}", callId, schema, e.message, e)
+        }
 
         pipelineService.submitAsync(schema, callId, scriptId, audioFile, criteria)
 
@@ -210,7 +214,9 @@ class CallService(
                 try {
                     val audioKey = audioStorage.save(schema, callId, ext, p.audioFile)
                     callRepo.updateAudioKey(schema, callId, audioKey)
-                } catch (_: Exception) { /* non-critical */ }
+                } catch (e: Exception) {
+                    log.error("Failed to save audio for call {} (schema={}): {}", callId, schema, e.message, e)
+                }
 
                 queuedCallIds.add(callId)
                 queuedFiles.add(p.audioFile)
@@ -248,10 +254,15 @@ class CallService(
         val byStatus = callRepo.countByStatus(schema, managerId)
         val processing = listOf("queued", "processing", "analyzing", "transcribing")
             .sumOf { byStatus[it] ?: 0L }
-        val done = (byStatus["done"] ?: 0L) + (byStatus["transcribed_only"] ?: 0L)
+        val done = listOf("done", "transcribed_only", "no_speech")
+            .sumOf { byStatus[it] ?: 0L }
         val failed = byStatus["failed"] ?: 0L
         val total = byStatus.values.sum()
-        return mapOf("total" to total, "processing" to processing, "done" to done, "failed" to failed)
+        val noSpeech = byStatus["no_speech"] ?: 0L
+        return mapOf(
+            "total" to total, "processing" to processing,
+            "done" to done, "failed" to failed, "noSpeech" to noSpeech,
+        )
     }
 
     fun getResult(schema: String, callId: UUID): CallResultResponse {
