@@ -19,7 +19,7 @@ from src.utils import GPUMonitor
 
 logger = logging.getLogger(__name__)
 
-LONG_AUDIO_THRESHOLD_SEC = 300  # 5 min — switch to chunked processing
+LONG_AUDIO_THRESHOLD_SEC = 180  # 3 min — switch to chunked processing
 CHUNK_DURATION_SEC = 240        # 4 min per chunk
 CHUNK_OVERLAP_SEC = 15          # 15 sec overlap between chunks
 
@@ -154,8 +154,10 @@ class ASREngine:
         }
         if self.config.vad_filter:
             params["vad_parameters"] = {
+                "threshold": 0.3,
+                "min_speech_duration_ms": 100,
                 "min_silence_duration_ms": 300,
-                "speech_pad_ms": 400,
+                "speech_pad_ms": 500,
             }
         if self.config.initial_prompt:
             params["initial_prompt"] = self.config.initial_prompt
