@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { Plus, FolderUp, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { callsApi } from '@/api'
 import type { CallResponse } from '@/types'
@@ -11,14 +11,16 @@ import CallUploadModal from '@/components/calls/CallUploadModal.vue'
 import BulkUploadModal from '@/components/calls/BulkUploadModal.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const { formatDate, formatDuration, participantLabel } = useFormatters()
 
 const calls = ref<CallResponse[]>([])
 const loading = ref(true)
-const page = ref(1)
+const page = ref(Number(route.query.page) || 1)
 const totalPages = ref(1)
 const total = ref(0)
-const statusFilter = ref('')
+const statusFilter = ref((route.query.status as string) || '')
 const showUpload = ref(false)
 const showBulkUpload = ref(false)
 
@@ -59,14 +61,29 @@ async function fetchCalls() {
   }
 }
 
+function syncQuery() {
+  const query: Record<string, string> = {}
+  if (statusFilter.value) query.status = statusFilter.value
+  if (page.value > 1) query.page = String(page.value)
+  router.replace({ query })
+}
+
 onMounted(fetchCalls)
-watch([page, statusFilter], () => {
-  if (statusFilter.value) page.value = 1
+
+watch(statusFilter, () => {
+  page.value = 1
+  syncQuery()
+  fetchCalls()
+})
+
+watch(page, () => {
+  syncQuery()
   fetchCalls()
 })
 
 function handleUploaded() {
   page.value = 1
+  syncQuery()
   fetchCalls()
 }
 </script>

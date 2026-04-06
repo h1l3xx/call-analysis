@@ -180,7 +180,8 @@ class BatchSummaryService(
     private fun buildInternalSummaryPrompt(calls: List<CallEvalData>): String {
         val callSummaries = calls.take(50).joinToString("\n\n") { call ->
             """
-Звонок: ${call.filename ?: call.callId}
+Звонок ID: ${call.callId}
+Файл: ${call.filename ?: "N/A"}
 Менеджер: ${call.managerName ?: "Неизвестен"}
 Описание: ${call.summary ?: "N/A"}
 Оценка: ${call.overallScore ?: "N/A"}
@@ -195,15 +196,16 @@ class BatchSummaryService(
 Данные по каждому звонку:
 $callSummaries
 
-Сформируй АГРЕГИРОВАННЫЙ отчёт. Ответ СТРОГО в JSON формате:
+Сформируй АГРЕГИРОВАННЫЙ отчёт. Ответ СТРОГО в JSON формате.
+ВАЖНО: В каждой проблеме (issue) укажи массив "call_ids" — список ID звонков, в которых встречается эта проблема.
 {
   "total_calls": ${calls.size},
   "avg_score": <средний балл>,
   "business_process_issues": [
-    {"issue": "<описание узкого места>", "frequency": <кол-во звонков>, "severity": "high/medium/low"}
+    {"issue": "<описание узкого места>", "frequency": <кол-во звонков>, "severity": "high/medium/low", "call_ids": ["<ID звонка>", ...]}
   ],
   "communication_issues": [
-    {"issue": "<описание проблемы>", "frequency": <кол-во звонков>, "severity": "high/medium/low"}
+    {"issue": "<описание проблемы>", "frequency": <кол-во звонков>, "severity": "high/medium/low", "call_ids": ["<ID звонка>", ...]}
   ],
   "recurring_patterns": ["повторяющийся паттерн 1", ...],
   "top_recommendations": ["рекомендация 1", ...],
@@ -215,7 +217,8 @@ $callSummaries
     private fun buildExternalSummaryPrompt(calls: List<CallEvalData>): String {
         val callSummaries = calls.take(50).joinToString("\n\n") { call ->
             """
-Звонок: ${call.filename ?: call.callId}
+Звонок ID: ${call.callId}
+Файл: ${call.filename ?: "N/A"}
 Менеджер: ${call.managerName ?: "Неизвестен"}
 Описание: ${call.summary ?: "N/A"}
 Оценка: ${call.overallScore ?: "N/A"}
@@ -230,14 +233,17 @@ $callSummaries
 Данные по каждому звонку:
 $callSummaries
 
-Сформируй АГРЕГИРОВАННЫЙ отчёт. Ответ СТРОГО в JSON формате:
+Сформируй АГРЕГИРОВАННЫЙ отчёт. Ответ СТРОГО в JSON формате.
+ВАЖНО: В manager_performance у каждого менеджера укажи массив "call_ids" — список ID звонков этого менеджера. В common_client_complaints каждый элемент — объект с полями "complaint" и "call_ids".
 {
   "total_calls": ${calls.size},
   "avg_score": <средний балл>,
   "manager_performance": [
-    {"manager": "<имя>", "calls_count": <кол-во>, "avg_score": <средний балл>, "key_issues": ["проблема"]}
+    {"manager": "<имя>", "calls_count": <кол-во>, "avg_score": <средний балл>, "key_issues": ["проблема"], "call_ids": ["<ID звонка>", ...]}
   ],
-  "common_client_complaints": ["жалоба 1", ...],
+  "common_client_complaints": [
+    {"complaint": "<жалоба>", "call_ids": ["<ID звонка>", ...]}
+  ],
   "script_adherence": {
     "avg_adherence_percent": <процент следования скрипту>,
     "most_skipped_criteria": ["критерий 1", ...]

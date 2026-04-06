@@ -63,8 +63,11 @@ fun Route.batchRoutes(
             val batchId = pathUuid("id")
             val params = paginationParams()
             val callType = call.parameters["callType"]
+            val callIds = call.parameters["ids"]
+                ?.split(",")
+                ?.mapNotNull { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
             val (rawItems, total) = batchRepo.listCallsByBatch(
-                schema, batchId, callType, params.offset, params.pageSize
+                schema, batchId, callType, callIds, params.offset, params.pageSize
             )
 
             val items = rawItems.map { row ->

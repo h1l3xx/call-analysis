@@ -6,6 +6,7 @@ import { batchesApi } from '@/api'
 import type { BatchResponse, BatchSummaryResponse, CallResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
+import BatchCallsModal from '@/components/batches/BatchCallsModal.vue'
 
 const route = useRoute()
 const { formatDate, formatDuration, participantLabel } = useFormatters()
@@ -134,6 +135,17 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
   if (!content) return null
   try { return JSON.parse(content) } catch { return null }
 }
+
+const modalVisible = ref(false)
+const modalTitle = ref('')
+const modalCallIds = ref<string[]>([])
+
+function openCallsModal(title: string, callIds: string[]) {
+  if (!callIds?.length) return
+  modalTitle.value = title
+  modalCallIds.value = callIds
+  modalVisible.value = true
+}
 </script>
 
 <template>
@@ -245,10 +257,12 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
                 <p class="font-medium text-gray-800 mb-2">Проблемы бизнес-процессов</p>
                 <div class="space-y-1.5">
                   <div v-for="(issue, i) in parseSummaryContent(s.content)!.business_process_issues" :key="i"
-                    class="flex items-start gap-2">
+                    class="flex items-start gap-2"
+                    :class="issue.call_ids?.length ? 'cursor-pointer hover:bg-gray-50 rounded-lg px-2 py-1 -mx-2 transition-colors' : ''"
+                    @click="issue.call_ids?.length && openCallsModal(issue.issue, issue.call_ids)">
                     <span class="mt-1 w-2 h-2 rounded-full shrink-0"
                       :class="issue.severity === 'high' ? 'bg-red-500' : issue.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'" />
-                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="text-gray-400 ml-1">({{ issue.frequency }} зв.)</span></span>
+                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="ml-1" :class="issue.call_ids?.length ? 'text-primary-500 underline decoration-dotted' : 'text-gray-400'">({{ issue.frequency }} зв.)</span></span>
                   </div>
                 </div>
               </div>
@@ -258,10 +272,12 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
                 <p class="font-medium text-gray-800 mb-2">Проблемы коммуникации</p>
                 <div class="space-y-1.5">
                   <div v-for="(issue, i) in parseSummaryContent(s.content)!.communication_issues" :key="i"
-                    class="flex items-start gap-2">
+                    class="flex items-start gap-2"
+                    :class="issue.call_ids?.length ? 'cursor-pointer hover:bg-gray-50 rounded-lg px-2 py-1 -mx-2 transition-colors' : ''"
+                    @click="issue.call_ids?.length && openCallsModal(issue.issue, issue.call_ids)">
                     <span class="mt-1 w-2 h-2 rounded-full shrink-0"
                       :class="issue.severity === 'high' ? 'bg-red-500' : issue.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'" />
-                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="text-gray-400 ml-1">({{ issue.frequency }} зв.)</span></span>
+                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="ml-1" :class="issue.call_ids?.length ? 'text-primary-500 underline decoration-dotted' : 'text-gray-400'">({{ issue.frequency }} зв.)</span></span>
                   </div>
                 </div>
               </div>
@@ -271,10 +287,12 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
                 <p class="font-medium text-gray-800 mb-2">Производительность менеджеров</p>
                 <div class="space-y-2">
                   <div v-for="(mgr, i) in parseSummaryContent(s.content)!.manager_performance" :key="i"
-                    class="bg-gray-50 rounded-lg p-3">
+                    class="bg-gray-50 rounded-lg p-3 transition-colors"
+                    :class="mgr.call_ids?.length ? 'cursor-pointer hover:bg-gray-100' : ''"
+                    @click="mgr.call_ids?.length && openCallsModal(mgr.manager, mgr.call_ids)">
                     <div class="flex items-center justify-between mb-1">
                       <span class="font-medium text-gray-900">{{ mgr.manager }}</span>
-                      <span class="text-xs text-gray-500">{{ mgr.calls_count }} зв. · ср. балл {{ Math.round(mgr.avg_score) }}</span>
+                      <span class="text-xs" :class="mgr.call_ids?.length ? 'text-primary-500 underline decoration-dotted' : 'text-gray-500'">{{ mgr.calls_count }} зв. · ср. балл {{ Math.round(mgr.avg_score) }}</span>
                     </div>
                     <ul v-if="mgr.key_issues?.length" class="space-y-0.5">
                       <li v-for="(iss, j) in mgr.key_issues" :key="j" class="text-gray-600 text-xs">• {{ iss }}</li>
@@ -310,8 +328,17 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
               <!-- Common client complaints (external) -->
               <div v-if="parseSummaryContent(s.content)!.common_client_complaints?.length">
                 <p class="font-medium text-gray-800 mb-1">Частые жалобы клиентов</p>
-                <ul class="list-disc list-inside space-y-0.5 text-gray-600">
-                  <li v-for="(c, i) in parseSummaryContent(s.content)!.common_client_complaints" :key="i">{{ c }}</li>
+                <ul class="space-y-0.5 text-gray-600">
+                  <template v-for="(c, i) in parseSummaryContent(s.content)!.common_client_complaints" :key="i">
+                    <li v-if="typeof c === 'string'" class="list-disc list-inside">{{ c }}</li>
+                    <li v-else
+                      class="list-disc list-inside transition-colors"
+                      :class="c.call_ids?.length ? 'cursor-pointer hover:bg-gray-50 rounded px-2 py-0.5 -mx-2 text-primary-700' : ''"
+                      @click="c.call_ids?.length && openCallsModal(c.complaint, c.call_ids)">
+                      {{ c.complaint }}
+                      <span v-if="c.call_ids?.length" class="text-primary-500 text-xs underline decoration-dotted ml-1">({{ c.call_ids.length }} зв.)</span>
+                    </li>
+                  </template>
                 </ul>
               </div>
 
@@ -395,5 +422,13 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
         </div>
       </div>
     </template>
+
+    <BatchCallsModal
+      v-if="modalVisible"
+      :batch-id="batchId"
+      :title="modalTitle"
+      :call-ids="modalCallIds"
+      @close="modalVisible = false"
+    />
   </div>
 </template>

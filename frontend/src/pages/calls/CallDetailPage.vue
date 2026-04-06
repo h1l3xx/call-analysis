@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, RefreshCw } from 'lucide-vue-next'
 import { callsApi } from '@/api'
 import type { CallDetailResponse, CallResultResponse } from '@/types'
@@ -12,6 +12,7 @@ import SpeakerMetricsChart from '@/components/calls/SpeakerMetricsChart.vue'
 import QualityScoreCard from '@/components/calls/QualityScoreCard.vue'
 
 const route = useRoute()
+const router = useRouter()
 const { formatDate, formatDuration, participantLabel } = useFormatters()
 
 const call = ref<CallDetailResponse | null>(null)
@@ -75,9 +76,9 @@ const tabs = [
 <template>
   <div class="space-y-5">
     <div class="flex items-center gap-3">
-      <RouterLink to="/calls" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+      <button @click="router.back()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
         <ArrowLeft class="w-5 h-5" />
-      </RouterLink>
+      </button>
       <h1 class="text-2xl font-bold text-gray-900">Детали звонка</h1>
     </div>
 

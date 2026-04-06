@@ -14,7 +14,7 @@ export const batchesApi = {
   get(id: string) {
     return client.get<BatchDetailResponse>(`/api/v1/batches/${id}`)
   },
-  getCalls(id: string, params: { page?: number; pageSize?: number; callType?: string } = {}) {
+  getCalls(id: string, params: { page?: number; pageSize?: number; callType?: string; ids?: string } = {}) {
     return client.get<PaginatedResponse<CallResponse>>(`/api/v1/batches/${id}/calls`, { params })
   },
   getSummaries(id: string) {

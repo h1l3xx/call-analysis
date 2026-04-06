@@ -88,6 +88,7 @@ class BatchRepository {
         schema: String,
         batchId: UUID,
         callType: String? = null,
+        callIds: List<UUID>? = null,
         off: Long = 0,
         limit: Int = 100,
     ): Pair<List<CallRow>, Long> = transaction {
@@ -102,6 +103,9 @@ class BatchRepository {
 
         val conditions = mutableListOf<Op<Boolean>>(Op.build { cl.batchId eq batchId })
         callType?.let { ct -> conditions.add(Op.build { cl.callType eq ct }) }
+        if (!callIds.isNullOrEmpty()) {
+            conditions.add(Op.build { cl.id inList callIds })
+        }
 
         val query = base.selectAll().where { conditions.reduce { acc, op -> acc and op } }
         val total = query.count()
