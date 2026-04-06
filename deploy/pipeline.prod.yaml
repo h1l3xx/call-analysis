@@ -8,7 +8,7 @@ asr:
   compute_type: "float16"
   cpu_threads: 6
   beam_size: 5
-  temperature: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  temperature: [0.0, 0.2, 0.4]
   vad_filter: true
   initial_prompt: "Ваша компания, администратор, запись на прием, диагностика, консультация"
   language: "ru"
