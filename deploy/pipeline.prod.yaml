@@ -10,7 +10,7 @@ asr:
   beam_size: 5
   temperature: [0.0, 0.2, 0.4]
   vad_filter: false
-  initial_prompt: "Ваша компания, администратор, запись на прием, диагностика, консультация"
+  initial_prompt: "Запись телефонного разговора. Здравствуйте, добрый день."
   language: "ru"
 
   preprocessing:

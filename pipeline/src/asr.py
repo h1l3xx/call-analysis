@@ -151,6 +151,10 @@ class ASREngine:
             "language": self.config.language,
             "word_timestamps": word_timestamps,
             "condition_on_previous_text": False,
+            "hallucination_silence_threshold": 2.0,
+            "no_speech_threshold": 0.95,
+            "log_prob_threshold": -1.5,
+            "compression_ratio_threshold": 2.8,
         }
         if self.config.vad_filter:
             params["vad_parameters"] = {
@@ -162,6 +166,33 @@ class ASREngine:
         if self.config.initial_prompt:
             params["initial_prompt"] = self.config.initial_prompt
         return params
+
+    @staticmethod
+    def _strip_hallucinations(text: str) -> str:
+        """Remove known Whisper hallucination patterns from transcription."""
+        import re
+
+        hallucination_patterns = [
+            r"^Продолжение следует\.{0,3}\s*",
+            r"^и т\.?\s*д\.?\s*",
+            r"^Субтитры\s+.*?\n?\s*",
+            r"^Редактор субтитров.*?\n?\s*",
+            r"^Подписывайтесь на канал.*?\n?\s*",
+            r"^Спасибо за (просмотр|подписку|внимание)\.?\s*",
+            r"^\.{2,}\s*",
+            r"^Благодарю за внимание\.?\s*",
+            r"^Музыка\.?\s*",
+            r"^♪.*?♪\s*",
+        ]
+
+        cleaned = text
+        for pattern in hallucination_patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+
+        if cleaned != text:
+            logger.info("Stripped hallucination artifacts from transcription start")
+
+        return cleaned
 
     def _gpu_cleanup(self):
         if self.config.device == "cuda":
@@ -204,7 +235,7 @@ class ASREngine:
                             "end": round(w.end, 3),
                         })
 
-            transcription_text = transcription_text.strip()
+            transcription_text = self._strip_hallucinations(transcription_text.strip())
             elapsed_time = time.time() - start_time
             rtf = elapsed_time / audio_duration if audio_duration else None
 
@@ -341,7 +372,7 @@ class ASREngine:
                     Path(tmp.name).unlink(missing_ok=True)
                     self._gpu_cleanup()
 
-            merged_text = self._merge_overlapping_texts(all_text_parts)
+            merged_text = self._strip_hallucinations(self._merge_overlapping_texts(all_text_parts))
 
             if word_timestamps and all_word_segments:
                 all_word_segments = self._deduplicate_word_segments(all_word_segments)
