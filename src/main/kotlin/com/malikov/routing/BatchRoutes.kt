@@ -133,8 +133,13 @@ fun Route.batchRoutes(
 
         post("/{id}/summarize") {
             val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val schema = p.schema!!
             val batchId = pathUuid("id")
-            batchSummaryService.generateBatchSummary(p.schema!!, batchId)
+            batchSummaryService.generateBatchSummary(schema, batchId)
+            val batch = batchRepo.findById(schema, batchId)
+            if (batch != null && batch.status == "failed") {
+                batchRepo.updateStatus(schema, batchId, "done")
+            }
             call.respond(mapOf("status" to "ok", "message" to "Summary regenerated"))
         }
 

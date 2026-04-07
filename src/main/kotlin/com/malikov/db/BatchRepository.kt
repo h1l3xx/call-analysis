@@ -74,6 +74,11 @@ class BatchRepository {
         }
     }
 
+    fun updateTotalCalls(schema: String, batchId: UUID, total: Int) = transaction {
+        val b = TBatches(schema)
+        b.update({ b.id eq batchId }) { it[b.totalCalls] = total }
+    }
+
     fun incrementProcessed(schema: String, batchId: UUID): Int = transaction {
         val b = TBatches(schema)
         b.update({ b.id eq batchId }) {

@@ -56,14 +56,36 @@ class PipelineResultWriter {
         failedStep: String,
         errorMessage: String,
     ) = transaction {
+        val friendly = humanizeError(errorMessage)
         val cl = TCalls(schema)
         cl.update({ cl.id eq callId }) {
             it[cl.status]       = "failed"
             it[cl.failedStep]   = failedStep
-            it[cl.errorMessage] = errorMessage.take(2000)
+            it[cl.errorMessage] = friendly.take(2000)
             it[cl.finishedAt]   = System.currentTimeMillis()
         }
-        log.warn("Call {} marked as failed at step '{}': {}", callId, failedStep, errorMessage)
+        log.warn("Call {} marked as failed at step '{}': {} (raw: {})", callId, failedStep, friendly, errorMessage)
+    }
+
+    companion object {
+        fun humanizeError(raw: String?): String {
+            if (raw.isNullOrBlank()) return "Неизвестная ошибка"
+            return when {
+                "NoBackendError" in raw ->
+                    "Формат аудиофайла не поддерживается или файл повреждён"
+                raw.startsWith("CORRUPTED_AUDIO") || "Битый аудиофайл" in raw ->
+                    "Аудиофайл повреждён или имеет неверный формат"
+                "NO_SPEECH" in raw ->
+                    "В записи не обнаружена речь"
+                raw.startsWith("Не удалось обработать аудио") ->
+                    "Не удалось обработать аудиофайл — возможно, формат не поддерживается"
+                raw.startsWith("Pipeline [") -> {
+                    val code = raw.substringAfter("[").substringBefore("]")
+                    "Ошибка сервиса обработки (код $code)"
+                }
+                else -> raw.take(300)
+            }
+        }
     }
 
     fun markNoSpeech(schema: String, callId: UUID, reason: String) = transaction {

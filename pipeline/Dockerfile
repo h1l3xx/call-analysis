@@ -35,9 +35,11 @@ LABEL maintainer="ScanovichAI <contact@scanovich.ai>"
 LABEL version="5.1.0"
 LABEL description="Call Analytics Platform — call transcription and quality analysis"
 
-# Установка минимальных системных зависимостей для runtime
+# Установка системных зависимостей для runtime
 RUN apt-get update && apt-get install -y \
     libgomp1 \
+    ffmpeg \
+    libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание непривилегированного пользователя

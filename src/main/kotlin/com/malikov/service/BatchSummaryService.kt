@@ -282,20 +282,22 @@ $callSummaries
 """.trimIndent()
     }
 
-    private fun callLlm(prompt: String): String {
-        return kotlinx.coroutines.runBlocking {
+    private fun callLlm(prompt: String): String = kotlinx.coroutines.runBlocking {
+        val messages = mutableListOf(
+            LlmMessage("system", "Ты — аналитик качества звонков. Отвечай ТОЛЬКО в формате JSON."),
+            LlmMessage("user", prompt),
+        )
+
+        val maxAttempts = 3
+        for (attempt in 1..maxAttempts) {
             val response = client.post("$llmBaseUrl/chat/completions") {
                 header("Authorization", "Bearer $llmApiKey")
                 contentType(ContentType.Application.Json)
                 setBody(json.encodeToString(LlmRequest(
                     model = llmModel,
-                    messages = listOf(
-                        LlmMessage("system", "Ты — аналитик качества звонков. Отвечай ТОЛЬКО в формате JSON."),
-                        LlmMessage("user", prompt),
-                    ),
+                    messages = messages.toList(),
                     responseFormat = LlmResponseFormat("json_object"),
                     temperature = 0.1,
-                    maxTokens = 4096,
                 )))
             }
 
@@ -305,9 +307,27 @@ $callSummaries
             }
 
             val result = response.body<LlmResponse>()
-            result.choices.firstOrNull()?.message?.content
+            val content = result.choices.firstOrNull()?.message?.content
                 ?: throw RuntimeException("Empty LLM summary response")
+
+            try {
+                Json.parseToJsonElement(content)
+                return@runBlocking content
+            } catch (e: Exception) {
+                if (attempt == maxAttempts) {
+                    log.error("LLM failed to produce valid JSON after {} attempts ({} chars): {}…",
+                        maxAttempts, content.length, content.takeLast(200))
+                    throw RuntimeException("LLM returned invalid JSON after $maxAttempts attempts")
+                }
+                log.warn("LLM returned invalid JSON on attempt {} — asking to fix", attempt)
+                messages.add(LlmMessage("assistant", content))
+                messages.add(LlmMessage("user",
+                    "Твой ответ содержит невалидный JSON (обрезан или синтаксическая ошибка). " +
+                    "Исправь и верни ПОЛНЫЙ валидный JSON. Не сокращай данные, верни всю структуру целиком."
+                ))
+            }
         }
+        throw RuntimeException("Unreachable")
     }
 
     fun shutdown() { client.close() }
@@ -333,7 +353,7 @@ $callSummaries
         val responseFormat: LlmResponseFormat? = null,
         val temperature: Double = 0.1,
         @kotlinx.serialization.SerialName("max_tokens")
-        val maxTokens: Int = 4096,
+        val maxTokens: Int = 16384,
     )
 
     @Serializable

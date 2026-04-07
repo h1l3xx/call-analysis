@@ -239,6 +239,10 @@ class CallService(
             }
         }
 
+        if (queued != actualTotal) {
+            batchRepo.updateTotalCalls(schema, batchId, queued)
+        }
+
         batchProcessingService.startBatchProcessing(
             schema = schema, batchId = batchId,
             callFiles = queuedCallIds.zip(queuedFiles),

@@ -52,9 +52,13 @@ class BatchProcessingService(
                 batchRepo.updateStatus(schema, batchId, "evaluating")
                 phaseEvaluate(schema, batchId, transcribedIds)
 
-                // Phase C: summary
+                // Phase C: summary (non-fatal — batch is done even if summary fails)
                 batchRepo.updateStatus(schema, batchId, "summarizing")
-                batchSummaryService.generateBatchSummary(schema, batchId)
+                try {
+                    batchSummaryService.generateBatchSummary(schema, batchId)
+                } catch (e: Exception) {
+                    log.error("Summary generation failed for batch {} — batch will still be marked done", batchId, e)
+                }
 
                 batchRepo.updateStatus(schema, batchId, "done")
                 AppMetrics.batchesCompleted.increment()

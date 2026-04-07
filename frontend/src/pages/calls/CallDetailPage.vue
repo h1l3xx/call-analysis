@@ -140,7 +140,7 @@ const tabs = [
           В записи не обнаружена речь — звонок пропущен.
         </div>
         <div v-else-if="call.errorMessage" class="mt-4 bg-red-50 text-red-700 text-sm rounded-lg px-4 py-3">
-          <strong>Ошибка ({{ call.failedStep }}):</strong> {{ call.errorMessage }}
+          <strong>Ошибка ({{ call.failedStep ? ({ transcription: 'транскрибация', evaluation: 'оценка', pipeline_analyze: 'обработка' } as Record<string, string>)[call.failedStep] || call.failedStep : 'обработка' }}):</strong> {{ call.errorMessage }}
         </div>
       </div>
 

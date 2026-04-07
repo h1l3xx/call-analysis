@@ -35,8 +35,8 @@ async function fetchBatch() {
   }
 }
 
-async function fetchCalls() {
-  callsLoading.value = true
+async function fetchCalls(silent = false) {
+  if (!silent) callsLoading.value = true
   try {
     const callType = tab.value === 'all' ? undefined : tab.value
     const { data } = await batchesApi.getCalls(batchId.value, {
@@ -45,7 +45,7 @@ async function fetchCalls() {
     calls.value = data.items
     callsTotalPages.value = data.totalPages
   } finally {
-    callsLoading.value = false
+    if (!silent) callsLoading.value = false
   }
 }
 
@@ -72,7 +72,7 @@ function startPolling() {
   pollInterval = setInterval(async () => {
     if (batch.value && !['done', 'failed'].includes(batch.value.status)) {
       await fetchBatch()
-      await fetchCalls()
+      await fetchCalls(true)
     } else if (pollInterval) {
       clearInterval(pollInterval)
       pollInterval = null
@@ -206,17 +206,17 @@ function openCallsModal(title: string, callIds: string[]) {
       </div>
 
       <!-- Summaries -->
-      <div v-if="summaries.length" class="space-y-3">
+      <div v-if="summaries.length || batch.status === 'failed'" class="space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-gray-900">Отчёты</h2>
           <button
-            v-if="batch.status === 'done'"
+            v-if="batch.status === 'done' || batch.status === 'failed'"
             :disabled="summarizing"
             class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50"
             @click="regenerateSummary"
           >
             <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': summarizing }" />
-            Пересоздать
+            {{ batch.status === 'failed' ? 'Сгенерировать отчёт' : 'Пересоздать' }}
           </button>
         </div>
 
