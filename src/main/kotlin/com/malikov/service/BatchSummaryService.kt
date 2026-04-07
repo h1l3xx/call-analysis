@@ -32,6 +32,7 @@ class BatchSummaryService(
 ) {
     private val log = LoggerFactory.getLogger(BatchSummaryService::class.java)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
+    private val inProgress = java.util.concurrent.ConcurrentHashMap.newKeySet<UUID>()
 
     private val llmBaseUrl = System.getenv("LLM_API_BASE_URL") ?: "https://openrouter.ai/api/v1"
     private val llmApiKey = System.getenv("LLM_API_KEY") ?: ""
@@ -48,6 +49,18 @@ class BatchSummaryService(
     }
 
     fun generateBatchSummary(schema: String, batchId: UUID) {
+        if (!inProgress.add(batchId)) {
+            log.warn("Summary generation already in progress for batch {}, skipping", batchId)
+            return
+        }
+        try {
+            doGenerateBatchSummary(schema, batchId)
+        } finally {
+            inProgress.remove(batchId)
+        }
+    }
+
+    private fun doGenerateBatchSummary(schema: String, batchId: UUID) {
         log.info("Generating summary for batch {} in schema {}", batchId, schema)
 
         val callData = collectBatchData(schema, batchId)
@@ -60,6 +73,8 @@ class BatchSummaryService(
 
         val internalCalls = callData.filter { it.callType == "internal" }
         val externalCalls = callData.filter { it.callType == "external" || it.callType == "unknown" }
+        log.info("Batch {} summary data: {} done calls ({} internal, {} external)",
+            batchId, callData.size, internalCalls.size, externalCalls.size)
 
         if (internalCalls.isNotEmpty()) {
             val summary = generateInternalSummary(internalCalls)

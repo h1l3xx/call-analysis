@@ -50,6 +50,7 @@ async function fetchCalls(silent = false) {
 }
 
 async function regenerateSummary() {
+  if (summarizing.value) return
   summarizing.value = true
   try {
     await batchesApi.regenerateSummary(batchId.value)
