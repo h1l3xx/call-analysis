@@ -90,6 +90,14 @@ class BatchProcessingService(
                     semaphore.acquire()
                     try {
                         transcribeSingle(schema, batchId, callId, audioFile)
+                    } catch (e: Exception) {
+                        log.error("Unexpected error transcribing call {} — skipping", callId, e)
+                        try {
+                            resultWriter.markFailed(schema, callId, "transcription", e.message ?: "Unknown error")
+                            batchRepo.incrementProcessed(schema, batchId)
+                        } catch (_: Exception) {}
+                        AppMetrics.callsFailed.increment()
+                        null
                     } finally {
                         semaphore.release()
                     }
@@ -171,6 +179,12 @@ class BatchProcessingService(
                     semaphore.acquire()
                     try {
                         evaluateSingle(schema, callId)
+                    } catch (e: Exception) {
+                        log.error("Unexpected error evaluating call {} — skipping", callId, e)
+                        try {
+                            resultWriter.markFailed(schema, callId, "evaluation", e.message ?: "Unknown error")
+                        } catch (_: Exception) {}
+                        AppMetrics.callsFailed.increment()
                     } finally {
                         semaphore.release()
                     }
