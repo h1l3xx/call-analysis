@@ -8,4 +8,10 @@ export const managersApi = {
   get(id: string) {
     return client.get<ManagerResponse>(`/api/v1/managers/${id}`)
   },
+  async allActive(): Promise<ManagerResponse[]> {
+    const { data } = await client.get<PaginatedResponse<ManagerResponse>>('/api/v1/managers', {
+      params: { isActive: true, pageSize: 500 },
+    })
+    return data.items
+  },
 }

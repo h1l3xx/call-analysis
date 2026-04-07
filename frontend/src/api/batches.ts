@@ -23,9 +23,10 @@ export const batchesApi = {
   regenerateSummary(id: string) {
     return client.post(`/api/v1/batches/${id}/summarize`)
   },
-  async exportCsv(id: string, departmentId?: string) {
+  async exportCsv(id: string, departmentId?: string, managerIds?: string[]) {
     const params: Record<string, string> = {}
     if (departmentId) params.departmentId = departmentId
+    if (managerIds?.length) params.managerIds = managerIds.join(',')
     const response = await client.get(`/api/v1/batches/${id}/export`, {
       params,
       responseType: 'blob',

@@ -15,11 +15,16 @@ class BatchExportService(
         timeZone = TimeZone.getTimeZone("Europe/Moscow")
     }
 
-    fun generateCsv(schema: String, batchId: UUID, departmentId: UUID? = null): String {
+    fun generateCsv(
+        schema: String,
+        batchId: UUID,
+        departmentId: UUID? = null,
+        managerIds: List<UUID>? = null,
+    ): String {
         val batch = batchRepo.findById(schema, batchId)
             ?: throw IllegalArgumentException("Batch not found")
         val summaries = batchRepo.listSummaries(schema, batchId)
-        val results = callRepo.findResultsByBatch(schema, batchId, departmentId)
+        val results = callRepo.findResultsByBatch(schema, batchId, departmentId, managerIds)
 
         val allMgrIds = (results.mapNotNull { it.call.managerId } +
                 results.mapNotNull { it.call.secondManagerId }).distinct()
@@ -31,7 +36,7 @@ class BatchExportService(
         val sb = StringBuilder()
         sb.append('\uFEFF')
 
-        if (departmentId == null) {
+        if (departmentId == null && managerIds.isNullOrEmpty()) {
             appendSummarySection(sb, batch, summaries)
             sb.appendLine()
         }
@@ -43,6 +48,7 @@ class BatchExportService(
     fun generateFilteredCsv(
         schema: String,
         departmentId: UUID? = null,
+        managerIds: List<UUID>? = null,
         status: String? = null,
         callType: String? = null,
         sinceMs: Long? = null,
@@ -50,7 +56,7 @@ class BatchExportService(
         search: String? = null,
     ): String {
         val results = callRepo.findResultsByFilters(
-            schema, departmentId, status, callType, sinceMs, untilMs, search,
+            schema, departmentId, managerIds, status, callType, sinceMs, untilMs, search,
         )
 
         val allMgrIds = (results.mapNotNull { it.call.managerId } +

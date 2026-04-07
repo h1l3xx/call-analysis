@@ -191,6 +191,10 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
             val departmentId = call.parameters["departmentId"]?.let {
                 runCatching { UUID.fromString(it) }.getOrNull()
             }
+            val managerIds = call.parameters["managerIds"]
+                ?.split(",")
+                ?.mapNotNull { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
+                ?.takeIf { it.isNotEmpty() }
 
             val managerId = if (p.roleEnum == Role.MANAGER) {
                 service.getManagerIdByUserId(p.schema!!, UUID.fromString(p.userId))
@@ -199,13 +203,17 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
                 call.parameters["managerId"]?.let { UUID.fromString(it) }
             }
 
-            call.respond(service.list(p.schema!!, params, status, managerId, departmentId, search))
+            call.respond(service.list(p.schema!!, params, status, managerId, managerIds, departmentId, search))
         }
 
         // ── Выгрузка CSV с фильтрами ──
         get("/export") {
             val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
             val departmentId = call.parameters["departmentId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            val managerIds = call.parameters["managerIds"]
+                ?.split(",")
+                ?.mapNotNull { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
+                ?.takeIf { it.isNotEmpty() }
             val status = call.parameters["status"]
             val callType = call.parameters["callType"]
             val sinceMs = call.parameters["sinceMs"]?.toLongOrNull()
@@ -215,6 +223,7 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
             val csv = batchExportService.generateFilteredCsv(
                 schema = p.schema!!,
                 departmentId = departmentId,
+                managerIds = managerIds,
                 status = status,
                 callType = callType,
                 sinceMs = sinceMs,

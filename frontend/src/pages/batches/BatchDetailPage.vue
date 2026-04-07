@@ -2,11 +2,13 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-vue-next'
-import { batchesApi, callsApi } from '@/api'
-import type { BatchResponse, BatchSummaryResponse, CallResponse } from '@/types'
+import { batchesApi, callsApi, managersApi } from '@/api'
+import type { BatchResponse, BatchSummaryResponse, CallResponse, ManagerResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
 import BatchCallsModal from '@/components/batches/BatchCallsModal.vue'
+import MultiSelect from '@/components/ui/MultiSelect.vue'
+import type { SelectOption } from '@/components/ui/MultiSelect.vue'
 
 const route = useRoute()
 const { formatDate, formatDuration, participantLabel } = useFormatters()
@@ -18,12 +20,23 @@ const loading = ref(true)
 const callsLoading = ref(false)
 const summarizing = ref(false)
 const exporting = ref(false)
-const exportMenuOpen = ref(false)
+const exportModalOpen = ref(false)
 const departments = ref<{ id: string; name: string }[]>([])
+const allManagers = ref<ManagerResponse[]>([])
+const exportDepartment = ref('')
+const exportManagers = ref<string[]>([])
 const tab = ref<'all' | 'internal' | 'external'>('all')
 const callsPage = ref(1)
 const callsTotalPages = ref(1)
 let pollInterval: ReturnType<typeof setInterval> | null = null
+
+const managerOptions = computed<SelectOption[]>(() =>
+  allManagers.value.map(m => ({
+    id: m.id,
+    label: m.fullName,
+    sublabel: m.departmentName || undefined,
+  }))
+)
 
 const batchId = computed(() => route.params.id as string)
 
@@ -62,11 +75,28 @@ async function regenerateSummary() {
   }
 }
 
-async function exportCsv(departmentId?: string) {
+function openExportModal() {
+  exportDepartment.value = ''
+  exportManagers.value = []
+  exportModalOpen.value = true
+}
+
+async function doExport() {
   exporting.value = true
-  exportMenuOpen.value = false
+  exportModalOpen.value = false
   try {
-    await batchesApi.exportCsv(batchId.value, departmentId)
+    const depId = exportDepartment.value || undefined
+    const mgrIds = exportManagers.value.length ? exportManagers.value : undefined
+    await batchesApi.exportCsv(batchId.value, depId, mgrIds)
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function exportAll() {
+  exporting.value = true
+  try {
+    await batchesApi.exportCsv(batchId.value)
   } finally {
     exporting.value = false
   }
@@ -74,8 +104,12 @@ async function exportCsv(departmentId?: string) {
 
 async function fetchDepartments() {
   try {
-    const { data } = await callsApi.departments()
-    departments.value = data
+    const [depts, mgrs] = await Promise.all([
+      callsApi.departments(),
+      managersApi.allActive(),
+    ])
+    departments.value = depts.data
+    allManagers.value = mgrs
   } catch { /* ignore */ }
 }
 
@@ -181,50 +215,23 @@ function openCallsModal(title: string, callIds: string[]) {
             <span class="text-sm text-gray-500">{{ formatDate(batch.createdAt) }}</span>
           </div>
           <div class="flex items-center gap-3 text-sm text-gray-600">
-            <div v-if="batch.status === 'done'" class="relative">
-              <div class="flex">
-                <button
-                  :disabled="exporting"
-                  class="flex items-center gap-1.5 px-3 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-primary-200 hover:bg-primary-50 disabled:opacity-50"
-                  :class="departments.length ? 'rounded-l-lg' : 'rounded-lg'"
-                  @click="exportCsv()"
-                >
-                  <Download class="w-3.5 h-3.5" :class="{ 'animate-bounce': exporting }" />
-                  CSV
-                </button>
-                <button
-                  v-if="departments.length"
-                  :disabled="exporting"
-                  class="flex items-center px-1.5 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-l-0 border-primary-200 rounded-r-lg hover:bg-primary-50 disabled:opacity-50"
-                  @click="exportMenuOpen = !exportMenuOpen"
-                >
-                  <ChevronDown class="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div
-                v-if="exportMenuOpen"
-                class="fixed inset-0 z-10"
-                @click="exportMenuOpen = false"
-              />
-              <div
-                v-if="exportMenuOpen"
-                class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[200px] py-1"
+            <div v-if="batch.status === 'done'" class="flex gap-1">
+              <button
+                :disabled="exporting"
+                class="flex items-center gap-1.5 px-3 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-primary-200 rounded-l-lg hover:bg-primary-50 disabled:opacity-50"
+                @click="exportAll"
               >
-                <button
-                  class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  @click="exportCsv()"
-                >
-                  Все звонки
-                </button>
-                <button
-                  v-for="d in departments"
-                  :key="d.id"
-                  class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  @click="exportCsv(d.id)"
-                >
-                  {{ d.name }}
-                </button>
-              </div>
+                <Download class="w-3.5 h-3.5" :class="{ 'animate-bounce': exporting }" />
+                CSV
+              </button>
+              <button
+                :disabled="exporting"
+                class="flex items-center px-1.5 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-l-0 border-primary-200 rounded-r-lg hover:bg-primary-50 disabled:opacity-50"
+                title="Выгрузка с фильтрами"
+                @click="openExportModal"
+              >
+                <ChevronDown class="w-3.5 h-3.5" />
+              </button>
             </div>
             <span>{{ batch.processedCalls }}/{{ batch.totalCalls }} звонков</span>
           </div>
@@ -495,5 +502,51 @@ function openCallsModal(title: string, callIds: string[]) {
       :call-ids="modalCallIds"
       @close="modalVisible = false"
     />
+
+    <!-- Export modal -->
+    <teleport to="body">
+      <div v-if="exportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="fixed inset-0 bg-black/40" @click="exportModalOpen = false" />
+        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+          <h3 class="text-lg font-semibold text-gray-900">Выгрузка CSV с фильтрами</h3>
+
+          <div v-if="managerOptions.length">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Сотрудники</label>
+            <MultiSelect
+              v-model="exportManagers"
+              :options="managerOptions"
+              placeholder="Все сотрудники..."
+            />
+          </div>
+
+          <div v-if="departments.length">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Отдел</label>
+            <select
+              v-model="exportDepartment"
+              class="w-full appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+            >
+              <option value="">Все отделы</option>
+              <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
+            </select>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button
+              class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg hover:bg-gray-100"
+              @click="exportModalOpen = false"
+            >
+              Отмена
+            </button>
+            <button
+              class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+              @click="doExport"
+            >
+              <Download class="w-4 h-4" />
+              Скачать
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>

@@ -82,6 +82,7 @@ class CallRepository {
         limit: Int,
         status: String? = null,
         managerId: UUID? = null,
+        managerIds: List<UUID>? = null,
         departmentId: UUID? = null,
         search: String? = null,
     ): Pair<List<CallRow>, Long> = transaction {
@@ -97,6 +98,9 @@ class CallRepository {
         val conditions = listOfNotNull(
             status?.let { Op.build { cl.status eq it } },
             managerId?.let { Op.build { cl.managerId eq it } },
+            managerIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                Op.build { cl.managerId inList ids }
+            },
             departmentId?.let { Op.build { m.departmentId eq it } },
             search?.takeIf { it.isNotBlank() }?.let { q ->
                 val pattern = "%${q.lowercase()}%"
@@ -186,6 +190,7 @@ class CallRepository {
         schema: String,
         batchId: UUID,
         departmentId: UUID? = null,
+        managerIds: List<UUID>? = null,
     ): List<CallResultRow> = transaction {
         val cl = TCalls(schema)
         val m  = TManagers(schema)
@@ -197,6 +202,9 @@ class CallRepository {
         val conditions = listOfNotNull(
             Op.build { cl.batchId eq batchId },
             departmentId?.let { Op.build { m.departmentId eq it } },
+            managerIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                Op.build { cl.managerId inList ids }
+            },
         )
 
         val callRows = cl.join(m, JoinType.LEFT, cl.managerId, m.id)
@@ -337,6 +345,7 @@ class CallRepository {
     fun findResultsByFilters(
         schema: String,
         departmentId: UUID? = null,
+        managerIds: List<UUID>? = null,
         status: String? = null,
         callType: String? = null,
         sinceMs: Long? = null,
@@ -352,6 +361,9 @@ class CallRepository {
 
         val conditions = listOfNotNull(
             departmentId?.let { Op.build { m.departmentId eq it } },
+            managerIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                Op.build { cl.managerId inList ids }
+            },
             status?.let { Op.build { cl.status eq it } },
             callType?.let { Op.build { cl.callType eq it } },
             sinceMs?.let { Op.build { cl.createdAt greaterEq it } },

@@ -29,10 +29,11 @@ class CallService(
         params: PaginationParams,
         status: String? = null,
         managerId: UUID? = null,
+        managerIds: List<UUID>? = null,
         departmentId: UUID? = null,
         search: String? = null,
     ): PaginatedResponse<CallResponse> {
-        val (rows, total) = callRepo.list(schema, params.offset, params.pageSize, status, managerId, departmentId, search)
+        val (rows, total) = callRepo.list(schema, params.offset, params.pageSize, status, managerId, managerIds, departmentId, search)
         val enriched = enrichSecondManagerNames(schema, rows)
         val shared = resolveSharedExtensions(schema, enriched)
         return paginated(enriched.mapIndexed { i, row -> row.toResponse(shared[i]) }, total, params)

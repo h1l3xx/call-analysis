@@ -8,7 +8,7 @@ import type {
 } from '@/types'
 
 export const callsApi = {
-  list(params: { page?: number; pageSize?: number; status?: string; managerId?: string; departmentId?: string; search?: string } = {}) {
+  list(params: { page?: number; pageSize?: number; status?: string; managerId?: string; managerIds?: string; departmentId?: string; search?: string } = {}) {
     return client.get<PaginatedResponse<CallResponse>>('/api/v1/calls', { params })
   },
   departments() {
@@ -43,6 +43,7 @@ export const callsApi = {
 
   async exportCsv(params: {
     departmentId?: string
+    managerIds?: string
     status?: string
     callType?: string
     sinceMs?: number

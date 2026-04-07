@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { Download, FileDown, Calendar, Filter } from 'lucide-vue-next'
-import { callsApi } from '@/api'
+import { callsApi, managersApi } from '@/api'
+import type { ManagerResponse } from '@/types'
+import MultiSelect from '@/components/ui/MultiSelect.vue'
+import type { SelectOption } from '@/components/ui/MultiSelect.vue'
 
 const departments = ref<{ id: string; name: string }[]>([])
+const allManagers = ref<ManagerResponse[]>([])
 const exporting = ref(false)
 
 const departmentId = ref('')
+const selectedManagers = ref<string[]>([])
 const status = ref('')
 const callType = ref('')
 const dateFrom = ref('')
 const dateTo = ref('')
 const search = ref('')
+
+const managerOptions = computed<SelectOption[]>(() =>
+  allManagers.value.map(m => ({
+    id: m.id,
+    label: m.fullName,
+    sublabel: m.departmentName || undefined,
+  }))
+)
 
 const statusOptions = [
   { value: '', label: 'Все статусы' },
@@ -29,18 +42,23 @@ const callTypeOptions = [
 ]
 
 const hasFilters = computed(() =>
-  departmentId.value || status.value || callType.value || dateFrom.value || dateTo.value || search.value
+  departmentId.value || selectedManagers.value.length || status.value || callType.value || dateFrom.value || dateTo.value || search.value
 )
 
 onMounted(async () => {
   try {
-    const { data } = await callsApi.departments()
-    departments.value = data
+    const [depts, mgrs] = await Promise.all([
+      callsApi.departments(),
+      managersApi.allActive(),
+    ])
+    departments.value = depts.data
+    allManagers.value = mgrs
   } catch { /* ignore */ }
 })
 
 function resetFilters() {
   departmentId.value = ''
+  selectedManagers.value = []
   status.value = ''
   callType.value = ''
   dateFrom.value = ''
@@ -54,6 +72,7 @@ async function doExport() {
   try {
     const params: Record<string, string | number> = {}
     if (departmentId.value) params.departmentId = departmentId.value
+    if (selectedManagers.value.length) params.managerIds = selectedManagers.value.join(',')
     if (status.value) params.status = status.value
     if (callType.value) params.callType = callType.value
     if (dateFrom.value) params.sinceMs = new Date(dateFrom.value).getTime()
@@ -79,14 +98,13 @@ async function doExport() {
         <span>Настройте фильтры для выгрузки</span>
       </div>
 
-      <!-- Search -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Поиск</label>
-        <input
-          v-model="search"
-          type="text"
-          placeholder="По имени сотрудника или файлу..."
-          class="w-full bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+      <!-- Employees -->
+      <div v-if="managerOptions.length">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Сотрудники</label>
+        <MultiSelect
+          v-model="selectedManagers"
+          :options="managerOptions"
+          placeholder="Выберите сотрудников..."
         />
       </div>
 
@@ -126,7 +144,16 @@ async function doExport() {
           </select>
         </div>
 
-        <div></div>
+        <!-- Search -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Поиск по файлу</label>
+          <input
+            v-model="search"
+            type="text"
+            placeholder="Имя файла..."
+            class="w-full bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+          />
+        </div>
 
         <!-- Date from -->
         <div>

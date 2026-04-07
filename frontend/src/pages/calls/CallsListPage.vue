@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { Plus, FolderUp, ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import { callsApi } from '@/api'
-import type { CallResponse } from '@/types'
+import { callsApi, managersApi } from '@/api'
+import type { CallResponse, ManagerResponse } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
 import CallUploadModal from '@/components/calls/CallUploadModal.vue'
 import BulkUploadModal from '@/components/calls/BulkUploadModal.vue'
+import MultiSelect from '@/components/ui/MultiSelect.vue'
+import type { SelectOption } from '@/components/ui/MultiSelect.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -23,10 +25,22 @@ const total = ref(0)
 const statusFilter = ref((route.query.status as string) || '')
 const departmentFilter = ref((route.query.department as string) || '')
 const searchQuery = ref((route.query.search as string) || '')
+const selectedManagers = ref<string[]>(
+  (route.query.managers as string)?.split(',').filter(Boolean) || []
+)
 const departments = ref<{ id: string; name: string }[]>([])
+const allManagers = ref<ManagerResponse[]>([])
 const showUpload = ref(false)
 const showBulkUpload = ref(false)
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
+
+const managerOptions = computed<SelectOption[]>(() =>
+  allManagers.value.map(m => ({
+    id: m.id,
+    label: m.fullName,
+    sublabel: m.departmentName || undefined,
+  }))
+)
 
 const statusOptions = [
   { value: '', label: 'Все статусы' },
@@ -58,6 +72,7 @@ async function fetchCalls() {
     if (statusFilter.value) params.status = statusFilter.value
     if (departmentFilter.value) params.departmentId = departmentFilter.value
     if (searchQuery.value.trim()) params.search = searchQuery.value.trim()
+    if (selectedManagers.value.length) params.managerIds = selectedManagers.value.join(',')
     const { data } = await callsApi.list(params)
     calls.value = data.items
     totalPages.value = data.totalPages
@@ -79,6 +94,7 @@ function syncQuery() {
   if (statusFilter.value) query.status = statusFilter.value
   if (departmentFilter.value) query.department = departmentFilter.value
   if (searchQuery.value.trim()) query.search = searchQuery.value.trim()
+  if (selectedManagers.value.length) query.managers = selectedManagers.value.join(',')
   if (page.value > 1) query.page = String(page.value)
   router.replace({ query })
 }
@@ -92,8 +108,15 @@ function onSearchInput() {
   }, 400)
 }
 
+async function fetchManagers() {
+  try {
+    allManagers.value = await managersApi.allActive()
+  } catch { /* ignore */ }
+}
+
 onMounted(() => {
   fetchDepartments()
+  fetchManagers()
   fetchCalls()
 })
 
@@ -104,6 +127,12 @@ watch(statusFilter, () => {
 })
 
 watch(departmentFilter, () => {
+  page.value = 1
+  syncQuery()
+  fetchCalls()
+})
+
+watch(selectedManagers, () => {
   page.value = 1
   syncQuery()
   fetchCalls()
@@ -145,11 +174,18 @@ function handleUploaded() {
     </div>
 
     <div class="flex flex-wrap gap-3 items-center">
+      <div v-if="managerOptions.length" class="w-72">
+        <MultiSelect
+          v-model="selectedManagers"
+          :options="managerOptions"
+          placeholder="Сотрудники..."
+        />
+      </div>
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Поиск по имени или файлу..."
-        class="bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none w-64"
+        placeholder="Поиск по файлу..."
+        class="bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none w-48"
         @input="onSearchInput"
       />
       <select
