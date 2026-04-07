@@ -126,10 +126,16 @@ class BatchProcessingService(
             log.info("Call {} transcribed (result_id={})", callId, response.resultId)
             callId
         } catch (e: PipelineException) {
-            if (e.statusCode == 422) {
-                log.info("Call {} skipped (no speech / bad audio): {}", callId, e.detail)
-                resultWriter.markNoSpeech(schema, callId, e.detail ?: "Audio could not be processed")
+            if (e.statusCode == 422 && e.detail?.contains("NO_SPEECH") == true) {
+                log.info("Call {} skipped (no speech): {}", callId, e.detail)
+                resultWriter.markNoSpeech(schema, callId, e.detail ?: "No speech detected")
                 batchRepo.incrementProcessed(schema, batchId)
+                null
+            } else if (e.statusCode == 422) {
+                log.warn("Call {} failed (bad audio): {}", callId, e.detail)
+                resultWriter.markFailed(schema, callId, "transcription", e.detail ?: "Audio could not be processed")
+                batchRepo.incrementProcessed(schema, batchId)
+                AppMetrics.callsFailed.increment()
                 null
             } else {
                 log.error("Transcription failed for call {}: [{}] {}", callId, e.statusCode, e.detail)
