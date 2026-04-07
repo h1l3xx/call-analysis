@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import { batchesApi } from '@/api'
+import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-vue-next'
+import { batchesApi, callsApi } from '@/api'
 import type { BatchResponse, BatchSummaryResponse, CallResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
@@ -18,6 +18,8 @@ const loading = ref(true)
 const callsLoading = ref(false)
 const summarizing = ref(false)
 const exporting = ref(false)
+const exportMenuOpen = ref(false)
+const departments = ref<{ id: string; name: string }[]>([])
 const tab = ref<'all' | 'internal' | 'external'>('all')
 const callsPage = ref(1)
 const callsTotalPages = ref(1)
@@ -60,13 +62,21 @@ async function regenerateSummary() {
   }
 }
 
-async function exportCsv() {
+async function exportCsv(departmentId?: string) {
   exporting.value = true
+  exportMenuOpen.value = false
   try {
-    await batchesApi.exportCsv(batchId.value)
+    await batchesApi.exportCsv(batchId.value, departmentId)
   } finally {
     exporting.value = false
   }
+}
+
+async function fetchDepartments() {
+  try {
+    const { data } = await callsApi.departments()
+    departments.value = data
+  } catch { /* ignore */ }
 }
 
 function startPolling() {
@@ -83,7 +93,7 @@ function startPolling() {
 
 onMounted(async () => {
   await fetchBatch()
-  await fetchCalls()
+  await Promise.all([fetchCalls(), fetchDepartments()])
   startPolling()
 })
 
@@ -171,15 +181,51 @@ function openCallsModal(title: string, callIds: string[]) {
             <span class="text-sm text-gray-500">{{ formatDate(batch.createdAt) }}</span>
           </div>
           <div class="flex items-center gap-3 text-sm text-gray-600">
-            <button
-              v-if="batch.status === 'done'"
-              :disabled="exporting"
-              class="flex items-center gap-1.5 px-3 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50"
-              @click="exportCsv"
-            >
-              <Download class="w-3.5 h-3.5" :class="{ 'animate-bounce': exporting }" />
-              Скачать CSV
-            </button>
+            <div v-if="batch.status === 'done'" class="relative">
+              <div class="flex">
+                <button
+                  :disabled="exporting"
+                  class="flex items-center gap-1.5 px-3 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-primary-200 hover:bg-primary-50 disabled:opacity-50"
+                  :class="departments.length ? 'rounded-l-lg' : 'rounded-lg'"
+                  @click="exportCsv()"
+                >
+                  <Download class="w-3.5 h-3.5" :class="{ 'animate-bounce': exporting }" />
+                  CSV
+                </button>
+                <button
+                  v-if="departments.length"
+                  :disabled="exporting"
+                  class="flex items-center px-1.5 py-1.5 font-medium text-primary-600 hover:text-primary-700 border border-l-0 border-primary-200 rounded-r-lg hover:bg-primary-50 disabled:opacity-50"
+                  @click="exportMenuOpen = !exportMenuOpen"
+                >
+                  <ChevronDown class="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div
+                v-if="exportMenuOpen"
+                class="fixed inset-0 z-10"
+                @click="exportMenuOpen = false"
+              />
+              <div
+                v-if="exportMenuOpen"
+                class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[200px] py-1"
+              >
+                <button
+                  class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  @click="exportCsv()"
+                >
+                  Все звонки
+                </button>
+                <button
+                  v-for="d in departments"
+                  :key="d.id"
+                  class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  @click="exportCsv(d.id)"
+                >
+                  {{ d.name }}
+                </button>
+              </div>
+            </div>
             <span>{{ batch.processedCalls }}/{{ batch.totalCalls }} звонков</span>
           </div>
         </div>

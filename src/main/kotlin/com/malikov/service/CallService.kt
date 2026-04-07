@@ -7,6 +7,8 @@ import com.malikov.pipeline.PipelineCriterionInput
 import com.malikov.pipeline.PipelineSpeakerTurn
 import com.malikov.pipeline.PipelineService
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
@@ -27,8 +29,10 @@ class CallService(
         params: PaginationParams,
         status: String? = null,
         managerId: UUID? = null,
+        departmentId: UUID? = null,
+        search: String? = null,
     ): PaginatedResponse<CallResponse> {
-        val (rows, total) = callRepo.list(schema, params.offset, params.pageSize, status, managerId)
+        val (rows, total) = callRepo.list(schema, params.offset, params.pageSize, status, managerId, departmentId, search)
         val enriched = enrichSecondManagerNames(schema, rows)
         val shared = resolveSharedExtensions(schema, enriched)
         return paginated(enriched.mapIndexed { i, row -> row.toResponse(shared[i]) }, total, params)
@@ -252,6 +256,13 @@ class CallService(
             batchId = batchId.toString(), total = files.size,
             queued = queued, failed = failed, items = results,
         )
+    }
+
+    fun listDepartments(schema: String): List<Map<String, String>> = transaction {
+        val d = com.malikov.db.TDepartments(schema)
+        d.selectAll().where { d.isActive eq true }
+            .orderBy(d.name)
+            .map { mapOf("id" to it[d.id].toString(), "name" to it[d.name]) }
     }
 
     fun getStats(schema: String, managerId: UUID? = null): Map<String, Long> {

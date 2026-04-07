@@ -116,11 +116,15 @@ class BatchSummaryService(
         val t = TTranscriptions(schema)
         val qs = TQualityScores(schema)
         val m = TManagers(schema)
+        val m2 = TManagers(schema)
+        val u2 = Users.alias("u2")
 
         cl.join(t, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, t.callId)
             .join(qs, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, qs.callId)
             .join(m, org.jetbrains.exposed.sql.JoinType.LEFT, cl.managerId, m.id)
             .join(Users, org.jetbrains.exposed.sql.JoinType.LEFT, m.userId, Users.id)
+            .join(m2, org.jetbrains.exposed.sql.JoinType.LEFT, cl.secondManagerId, m2.id)
+            .join(u2, org.jetbrains.exposed.sql.JoinType.LEFT, m2.userId, u2[Users.id])
             .selectAll()
             .where { (cl.batchId eq batchId) and (cl.status eq "done") }
             .map { row ->
@@ -128,6 +132,7 @@ class BatchSummaryService(
                     callId = row[cl.id].toString(),
                     callType = row[cl.callType] ?: "unknown",
                     managerName = row.getOrNull(Users.fullName),
+                    secondManagerName = row.getOrNull(u2[Users.fullName]),
                     filename = row[cl.audioFilename],
                     transcription = row.getOrNull(t.cleanedText) ?: row.getOrNull(t.rawText),
                     qualityCriteria = row.getOrNull(qs.criteria),
@@ -149,11 +154,15 @@ class BatchSummaryService(
         val t = TTranscriptions(schema)
         val qs = TQualityScores(schema)
         val m = TManagers(schema)
+        val m2 = TManagers(schema)
+        val u2 = Users.alias("u2")
 
         var base = cl.join(t, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, t.callId)
             .join(qs, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, qs.callId)
             .join(m, org.jetbrains.exposed.sql.JoinType.LEFT, cl.managerId, m.id)
             .join(Users, org.jetbrains.exposed.sql.JoinType.LEFT, m.userId, Users.id)
+            .join(m2, org.jetbrains.exposed.sql.JoinType.LEFT, cl.secondManagerId, m2.id)
+            .join(u2, org.jetbrains.exposed.sql.JoinType.LEFT, m2.userId, u2[Users.id])
 
         val conditions = mutableListOf(
             Op.build { cl.status eq "done" },
@@ -171,6 +180,7 @@ class BatchSummaryService(
                     callId = row[cl.id].toString(),
                     callType = row[cl.callType] ?: "unknown",
                     managerName = row.getOrNull(Users.fullName),
+                    secondManagerName = row.getOrNull(u2[Users.fullName]),
                     filename = row[cl.audioFilename],
                     transcription = row.getOrNull(t.cleanedText) ?: row.getOrNull(t.rawText),
                     qualityCriteria = row.getOrNull(qs.criteria),
@@ -231,10 +241,12 @@ $callSummaries
 
     private fun buildExternalSummaryPrompt(calls: List<CallEvalData>): String {
         val callSummaries = calls.take(50).joinToString("\n\n") { call ->
+            val managers = listOfNotNull(call.managerName, call.secondManagerName)
+                .joinToString(" / ").ifEmpty { "Неизвестен" }
             """
 Звонок ID: ${call.callId}
 Файл: ${call.filename ?: "N/A"}
-Менеджер: ${call.managerName ?: "Неизвестен"}
+Менеджеры: $managers
 Описание: ${call.summary ?: "N/A"}
 Оценка: ${call.overallScore ?: "N/A"}
 Сильные стороны: ${call.strengths ?: "N/A"}
@@ -244,6 +256,7 @@ $callSummaries
 
         return """
 Проанализируй результаты оценки ${calls.size} ВНЕШНИХ звонков менеджеров с клиентами.
+ВАЖНО: Один номер телефона могут использовать несколько сотрудников — в поле "Менеджеры" через " / " указаны все участники. Учитывай звонок в статистике каждого из указанных менеджеров.
 
 Данные по каждому звонку:
 $callSummaries
@@ -351,6 +364,7 @@ $callSummaries
         val callId: String,
         val callType: String,
         val managerName: String?,
+        val secondManagerName: String?,
         val filename: String?,
         val transcription: String?,
         val qualityCriteria: String?,

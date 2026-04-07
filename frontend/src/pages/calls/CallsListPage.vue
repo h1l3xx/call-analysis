@@ -21,8 +21,12 @@ const page = ref(Number(route.query.page) || 1)
 const totalPages = ref(1)
 const total = ref(0)
 const statusFilter = ref((route.query.status as string) || '')
+const departmentFilter = ref((route.query.department as string) || '')
+const searchQuery = ref((route.query.search as string) || '')
+const departments = ref<{ id: string; name: string }[]>([])
 const showUpload = ref(false)
 const showBulkUpload = ref(false)
+let searchTimeout: ReturnType<typeof setTimeout> | null = null
 
 const statusOptions = [
   { value: '', label: 'Все статусы' },
@@ -52,6 +56,8 @@ async function fetchCalls() {
   try {
     const params: Record<string, any> = { page: page.value, pageSize: 20 }
     if (statusFilter.value) params.status = statusFilter.value
+    if (departmentFilter.value) params.departmentId = departmentFilter.value
+    if (searchQuery.value.trim()) params.search = searchQuery.value.trim()
     const { data } = await callsApi.list(params)
     calls.value = data.items
     totalPages.value = data.totalPages
@@ -61,16 +67,43 @@ async function fetchCalls() {
   }
 }
 
+async function fetchDepartments() {
+  try {
+    const { data } = await callsApi.departments()
+    departments.value = data
+  } catch { /* ignore */ }
+}
+
 function syncQuery() {
   const query: Record<string, string> = {}
   if (statusFilter.value) query.status = statusFilter.value
+  if (departmentFilter.value) query.department = departmentFilter.value
+  if (searchQuery.value.trim()) query.search = searchQuery.value.trim()
   if (page.value > 1) query.page = String(page.value)
   router.replace({ query })
 }
 
-onMounted(fetchCalls)
+function onSearchInput() {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    page.value = 1
+    syncQuery()
+    fetchCalls()
+  }, 400)
+}
+
+onMounted(() => {
+  fetchDepartments()
+  fetchCalls()
+})
 
 watch(statusFilter, () => {
+  page.value = 1
+  syncQuery()
+  fetchCalls()
+})
+
+watch(departmentFilter, () => {
   page.value = 1
   syncQuery()
   fetchCalls()
@@ -111,12 +144,27 @@ function handleUploaded() {
       </div>
     </div>
 
-    <div class="flex gap-3">
+    <div class="flex flex-wrap gap-3 items-center">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Поиск по имени или файлу..."
+        class="bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none w-64"
+        @input="onSearchInput"
+      />
       <select
         v-model="statusFilter"
         class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
       >
         <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+      <select
+        v-if="departments.length"
+        v-model="departmentFilter"
+        class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+      >
+        <option value="">Все отделы</option>
+        <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
       </select>
       <span class="flex items-center text-sm text-gray-500">Всего: {{ total }}</span>
     </div>

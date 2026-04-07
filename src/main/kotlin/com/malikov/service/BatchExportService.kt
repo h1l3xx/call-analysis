@@ -15,11 +15,11 @@ class BatchExportService(
         timeZone = TimeZone.getTimeZone("Europe/Moscow")
     }
 
-    fun generateCsv(schema: String, batchId: UUID): String {
+    fun generateCsv(schema: String, batchId: UUID, departmentId: UUID? = null): String {
         val batch = batchRepo.findById(schema, batchId)
             ?: throw IllegalArgumentException("Batch not found")
         val summaries = batchRepo.listSummaries(schema, batchId)
-        val results = callRepo.findResultsByBatch(schema, batchId)
+        val results = callRepo.findResultsByBatch(schema, batchId, departmentId)
 
         val allMgrIds = (results.mapNotNull { it.call.managerId } +
                 results.mapNotNull { it.call.secondManagerId }).distinct()
@@ -31,10 +31,38 @@ class BatchExportService(
         val sb = StringBuilder()
         sb.append('\uFEFF')
 
-        appendSummarySection(sb, batch, summaries)
-        sb.appendLine()
+        if (departmentId == null) {
+            appendSummarySection(sb, batch, summaries)
+            sb.appendLine()
+        }
         appendCallsSection(sb, results, secondNames, sharedMap)
 
+        return sb.toString()
+    }
+
+    fun generateFilteredCsv(
+        schema: String,
+        departmentId: UUID? = null,
+        status: String? = null,
+        callType: String? = null,
+        sinceMs: Long? = null,
+        untilMs: Long? = null,
+        search: String? = null,
+    ): String {
+        val results = callRepo.findResultsByFilters(
+            schema, departmentId, status, callType, sinceMs, untilMs, search,
+        )
+
+        val allMgrIds = (results.mapNotNull { it.call.managerId } +
+                results.mapNotNull { it.call.secondManagerId }).distinct()
+        val secondNames = if (allMgrIds.isNotEmpty())
+            callRepo.resolveManagerNames(schema, allMgrIds) else emptyMap()
+        val sharedMap = if (allMgrIds.isNotEmpty())
+            managerRepo.findSharedExtensionNames(schema, allMgrIds) else emptyMap()
+
+        val sb = StringBuilder()
+        sb.append('\uFEFF')
+        appendCallsSection(sb, results, secondNames, sharedMap)
         return sb.toString()
     }
 
@@ -89,7 +117,15 @@ class BatchExportService(
     ) {
         val arr = obj[key]?.jsonArray ?: return
         if (arr.isEmpty()) return
-        val items = arr.mapNotNull { it.jsonPrimitive.contentOrNull }
+        val items = arr.mapNotNull { el ->
+            when (el) {
+                is JsonPrimitive -> el.contentOrNull
+                is JsonObject -> el["complaint"]?.jsonPrimitive?.contentOrNull
+                    ?: el["issue"]?.jsonPrimitive?.contentOrNull
+                    ?: el.toString()
+                else -> el.toString()
+            }
+        }
         if (items.isNotEmpty()) {
             sb.appendLine(csvRow(label, items.joinToString("; ")))
         }

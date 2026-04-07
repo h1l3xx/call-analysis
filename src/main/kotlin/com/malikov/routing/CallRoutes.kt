@@ -5,6 +5,7 @@ import com.malikov.config.ForbiddenException
 import com.malikov.config.NotFoundException
 import com.malikov.dto.CreateCallRequest
 import com.malikov.service.AudioStorageService
+import com.malikov.service.BatchExportService
 import com.malikov.service.CallService
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -23,7 +24,7 @@ private val ALLOWED_AUDIO_EXTENSIONS = setOf("wav", "mp3", "ogg", "flac", "m4a",
 private const val MAX_AUDIO_SIZE_BYTES = 100L * 1024 * 1024  // 100 MB
 private const val MAX_BULK_FILES = 500
 
-fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
+fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, batchExportService: BatchExportService) {
     route("/calls") {
 
         // ── Создание звонка (без аудио, для ручного / внешнего pipeline) ──
@@ -166,6 +167,12 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
             }
         }
 
+        // ── Справочник отделов (для фильтра) ──
+        get("/departments") {
+            val p = requireTenantRole(Role.MANAGER, Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            call.respond(service.listDepartments(p.schema!!))
+        }
+
         // ── Статистика по статусам ──
         get("/stats") {
             val p = requireTenantRole(Role.MANAGER, Role.TEAM_LEAD, Role.CLIENT_ADMIN)
@@ -180,6 +187,10 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
             val p = requireTenantRole(Role.MANAGER, Role.TEAM_LEAD, Role.CLIENT_ADMIN)
             val params = paginationParams()
             val status = call.parameters["status"]
+            val search = call.parameters["search"]
+            val departmentId = call.parameters["departmentId"]?.let {
+                runCatching { UUID.fromString(it) }.getOrNull()
+            }
 
             val managerId = if (p.roleEnum == Role.MANAGER) {
                 service.getManagerIdByUserId(p.schema!!, UUID.fromString(p.userId))
@@ -188,7 +199,36 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService) {
                 call.parameters["managerId"]?.let { UUID.fromString(it) }
             }
 
-            call.respond(service.list(p.schema!!, params, status, managerId))
+            call.respond(service.list(p.schema!!, params, status, managerId, departmentId, search))
+        }
+
+        // ── Выгрузка CSV с фильтрами ──
+        get("/export") {
+            val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val departmentId = call.parameters["departmentId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            val status = call.parameters["status"]
+            val callType = call.parameters["callType"]
+            val sinceMs = call.parameters["sinceMs"]?.toLongOrNull()
+            val untilMs = call.parameters["untilMs"]?.toLongOrNull()
+            val search = call.parameters["search"]
+
+            val csv = batchExportService.generateFilteredCsv(
+                schema = p.schema!!,
+                departmentId = departmentId,
+                status = status,
+                callType = callType,
+                sinceMs = sinceMs,
+                untilMs = untilMs,
+                search = search,
+            )
+            val ts = java.time.LocalDate.now().toString()
+            call.response.header(
+                HttpHeaders.ContentDisposition,
+                ContentDisposition.Attachment.withParameter(
+                    ContentDisposition.Parameters.FileName, "calls-export-${ts}.csv"
+                ).toString()
+            )
+            call.respondText(csv, ContentType.Text.CSV)
         }
 
         // ── Детали звонка ──

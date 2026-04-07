@@ -8,8 +8,11 @@ import type {
 } from '@/types'
 
 export const callsApi = {
-  list(params: { page?: number; pageSize?: number; status?: string; managerId?: string } = {}) {
+  list(params: { page?: number; pageSize?: number; status?: string; managerId?: string; departmentId?: string; search?: string } = {}) {
     return client.get<PaginatedResponse<CallResponse>>('/api/v1/calls', { params })
+  },
+  departments() {
+    return client.get<{ id: string; name: string }[]>('/api/v1/calls/departments')
   },
   stats() {
     return client.get<{ total: number; processing: number; done: number; failed: number; noSpeech: number }>('/api/v1/calls/stats')
@@ -36,6 +39,29 @@ export const callsApi = {
 
   getAudioUrl(id: string) {
     return `/api/v1/calls/${id}/audio`
+  },
+
+  async exportCsv(params: {
+    departmentId?: string
+    status?: string
+    callType?: string
+    sinceMs?: number
+    untilMs?: number
+    search?: string
+  } = {}) {
+    const response = await client.get('/api/v1/calls/export', {
+      params,
+      responseType: 'blob',
+    })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    const today = new Date().toISOString().slice(0, 10)
+    link.setAttribute('download', `calls-export-${today}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
   },
 
   bulkUpload(files: File[], onProgress?: (pct: number) => void) {

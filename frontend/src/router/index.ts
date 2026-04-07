@@ -76,6 +76,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
     },
     {
+      path: '/export',
+      name: 'export',
+      component: () => import('@/pages/ExportPage.vue'),
+      meta: { requiresAuth: true, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/pages/SettingsPage.vue'),

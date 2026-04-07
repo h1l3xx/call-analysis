@@ -146,7 +146,8 @@ fun Route.batchRoutes(
         get("/{id}/export") {
             val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
             val batchId = pathUuid("id")
-            val csv = batchExportService.generateCsv(p.schema!!, batchId)
+            val departmentId = call.parameters["departmentId"]?.let { UUID.fromString(it) }
+            val csv = batchExportService.generateCsv(p.schema!!, batchId, departmentId)
             call.response.header(
                 HttpHeaders.ContentDisposition,
                 ContentDisposition.Attachment.withParameter(
