@@ -90,5 +90,12 @@ class DepartmentCallPolicyService(
         }
         return repo.deleteDepartmentOverride(schema, UUID.fromString(departmentId), callDirection)
     }
+
+    fun deletePairPolicies(schema: String, departmentIdA: String, departmentIdB: String): Int {
+        val a = UUID.fromString(departmentIdA)
+        val b = UUID.fromString(departmentIdB)
+        require(a != b) { "departmentIds must differ" }
+        return repo.deletePairPolicies(schema, a, b)
+    }
 }
 

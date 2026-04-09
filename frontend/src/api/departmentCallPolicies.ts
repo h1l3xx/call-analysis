@@ -11,5 +11,8 @@ export const departmentCallPoliciesApi = {
   removeDepartmentOverride(departmentId: string, direction: string) {
     return client.delete(`/api/v1/department-call-policies/departments/${departmentId}/${direction}`)
   },
+  removePairPolicies(departmentIdA: string, departmentIdB: string) {
+    return client.delete(`/api/v1/department-call-policies/pair/${departmentIdA}/${departmentIdB}`)
+  },
 }
 

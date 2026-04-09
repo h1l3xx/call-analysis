@@ -38,6 +38,17 @@ fun Route.departmentCallPolicyRoutes(service: DepartmentCallPolicyService) {
             if (deleted) call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
             else call.respond(HttpStatusCode.NotFound, mapOf("error" to "Override not found"))
         }
+
+        delete("/pair/{departmentIdA}/{departmentIdB}") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val a = call.parameters["departmentIdA"]
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "departmentIdA is required"))
+            val b = call.parameters["departmentIdB"]
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "departmentIdB is required"))
+
+            val count = service.deletePairPolicies(p.schema!!, a, b)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "ok", "deleted" to count))
+        }
     }
 }
 

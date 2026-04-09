@@ -102,6 +102,14 @@ class DepartmentCallPolicyRepository {
         p.deleteWhere { (p.departmentId eq departmentId) and (p.secondDepartmentId eq null) and (p.callDirection eq callDirection) } > 0
     }
 
+    fun deletePairPolicies(schema: String, departmentIdA: UUID, departmentIdB: UUID): Int = transaction {
+        val p = TDepartmentCallPolicies(schema)
+        p.deleteWhere {
+            ((p.departmentId eq departmentIdA) and (p.secondDepartmentId eq departmentIdB)) or
+            ((p.departmentId eq departmentIdB) and (p.secondDepartmentId eq departmentIdA))
+        }
+    }
+
     private fun ResultRow.toRow(p: TDepartmentCallPolicies) = DepartmentCallPolicyRow(
         id = this[p.id],
         departmentId = this[p.departmentId],
