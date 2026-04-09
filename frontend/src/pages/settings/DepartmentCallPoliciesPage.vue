@@ -9,7 +9,6 @@ import type {
 } from '@/types'
 
 import PolicyGraph from '@/components/policies/PolicyGraph.vue'
-import GlobalPolicySidebar from '@/components/policies/GlobalPolicySidebar.vue'
 import DepartmentPolicyModal from '@/components/policies/DepartmentPolicyModal.vue'
 import EdgePolicyModal from '@/components/policies/EdgePolicyModal.vue'
 import AddEdgeModal from '@/components/policies/AddEdgeModal.vue'
@@ -70,17 +69,6 @@ function onEdgeClick(sourceId: string, targetId: string) {
   edgeSource.value = findDept(sourceId)
   edgeTarget.value = findDept(targetId)
   showEdgeModal.value = true
-}
-
-async function onSaveGlobal(direction: DepartmentPolicyCallDirection, scriptId: string | null, templateId: string) {
-  await departmentCallPoliciesApi.upsert({
-    departmentId: null,
-    secondDepartmentId: null,
-    callDirection: direction,
-    scriptId,
-    promptTemplateId: templateId,
-  })
-  await reloadPolicies()
 }
 
 async function onSaveDepartment(deptId: string, direction: DepartmentPolicyCallDirection, scriptId: string | null, templateId: string) {
@@ -147,7 +135,7 @@ onMounted(load)
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Политики скриптов и оценки</h1>
       <p class="text-sm text-gray-500 mt-1">
-        Клик по узлу — настройка отдела. Клик по связи — политика между отделами. Глобальные настройки — слева.
+        Клик по узлу — настройка отдела. Клик по связи — политика между отделами.
       </p>
     </div>
 
@@ -155,25 +143,14 @@ onMounted(load)
       Загрузка...
     </div>
 
-    <div v-else class="flex gap-4" style="height: calc(100vh - 180px)">
-      <div class="w-64 shrink-0 bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <GlobalPolicySidebar
-          :policies="policies"
-          :scripts="scripts"
-          :templates="templates"
-          @save="onSaveGlobal"
-        />
-      </div>
-
-      <div class="flex-1 bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <PolicyGraph
-          :departments="departments"
-          :policies="policies"
-          @node-click="onNodeClick"
-          @edge-click="onEdgeClick"
-          @add-edge="showAddEdge = true"
-        />
-      </div>
+    <div v-else class="bg-white border border-gray-200 rounded-xl overflow-hidden" style="height: calc(100vh - 180px)">
+      <PolicyGraph
+        :departments="departments"
+        :policies="policies"
+        @node-click="onNodeClick"
+        @edge-click="onEdgeClick"
+        @add-edge="showAddEdge = true"
+      />
     </div>
 
     <DepartmentPolicyModal

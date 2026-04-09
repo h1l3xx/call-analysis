@@ -131,7 +131,7 @@ function onResetAll() {
               <span
                 class="text-xs px-2 py-0.5 rounded-full"
                 :class="isInherited(d.value) ? 'bg-gray-200 text-gray-600' : 'bg-primary-100 text-primary-700'"
-              >{{ isInherited(d.value) ? 'Наследуется' : 'Переопределено' }}</span>
+              >{{ isInherited(d.value) ? 'По умолчанию' : 'Настроено' }}</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -179,7 +179,7 @@ function onResetAll() {
           >
             <Loader2 v-if="resettingAll" class="w-3.5 h-3.5 animate-spin" />
             <RotateCcw v-else class="w-3.5 h-3.5" />
-            Сбросить к глобальным
+            Сбросить по умолчанию
           </button>
           <div v-else />
           <button

@@ -92,7 +92,7 @@ function onSave(dir: DepartmentPolicyCallDirection) {
 
 function onRemoveEdge() {
   if (!props.sourceDepartment || !props.targetDepartment) return
-  if (!confirm('Удалить межотдельную связь? Политики будут наследоваться от глобальных.')) return
+  if (!confirm('Удалить межотдельную связь? Будут использоваться настройки по умолчанию.')) return
   emit('remove-edge', props.sourceDepartment.id, props.targetDepartment.id)
 }
 </script>
@@ -129,7 +129,7 @@ function onRemoveEdge() {
               <span
                 class="text-xs px-2 py-0.5 rounded-full"
                 :class="hasPairPolicy(d.value) ? 'bg-primary-100 text-primary-700' : 'bg-gray-200 text-gray-600'"
-              >{{ hasPairPolicy(d.value) ? 'Задано' : 'Наследуется' }}</span>
+              >{{ hasPairPolicy(d.value) ? 'Настроено' : 'По умолчанию' }}</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
