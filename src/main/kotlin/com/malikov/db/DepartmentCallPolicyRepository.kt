@@ -68,6 +68,12 @@ class DepartmentCallPolicyRepository {
         p.selectAll().where { p.id eq id }.single().toRow(p)
     }
 
+    private fun flipInternalDirection(dir: String): String = when (dir) {
+        "internal_outgoing" -> "internal_incoming"
+        "internal_incoming" -> "internal_outgoing"
+        else -> dir
+    }
+
     fun resolvePolicy(
         schema: String,
         departmentId: UUID?,
@@ -80,8 +86,9 @@ class DepartmentCallPolicyRepository {
                 .where { (p.departmentId eq departmentId) and (p.secondDepartmentId eq secondDepartmentId) and (p.callDirection eq callDirection) }
                 .singleOrNull()
                 ?.let { return@transaction it.toRow(p) }
+            val flipped = flipInternalDirection(callDirection)
             p.selectAll()
-                .where { (p.departmentId eq secondDepartmentId) and (p.secondDepartmentId eq departmentId) and (p.callDirection eq callDirection) }
+                .where { (p.departmentId eq secondDepartmentId) and (p.secondDepartmentId eq departmentId) and (p.callDirection eq flipped) }
                 .singleOrNull()
                 ?.let { return@transaction it.toRow(p) }
         }

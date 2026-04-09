@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { X, Save, Loader2, Trash2 } from 'lucide-vue-next'
 import type {
   DepartmentPolicyCallDirection,
@@ -28,10 +28,14 @@ const emit = defineEmits<{
   (e: 'remove-edge', sourceId: string, targetId: string): void
 }>()
 
-const internalDirs: { value: DepartmentPolicyCallDirection; label: string }[] = [
-  { value: 'internal_incoming', label: 'Внутренние входящие' },
-  { value: 'internal_outgoing', label: 'Внутренние исходящие' },
-]
+const internalDirs = computed(() => {
+  const src = props.sourceDepartment?.name ?? '?'
+  const tgt = props.targetDepartment?.name ?? '?'
+  return [
+    { value: 'internal_outgoing' as DepartmentPolicyCallDirection, label: `${src} → ${tgt}` },
+    { value: 'internal_incoming' as DepartmentPolicyCallDirection, label: `${tgt} → ${src}` },
+  ]
+})
 
 const localScript = ref<Record<string, string>>({})
 const localTemplate = ref<Record<string, string>>({})
@@ -75,7 +79,7 @@ watch(
   () => [props.visible, props.sourceDepartment, props.targetDepartment, props.policies],
   () => {
     if (!props.visible || !props.sourceDepartment || !props.targetDepartment) return
-    for (const d of internalDirs) {
+    for (const d of internalDirs.value) {
       localScript.value[d.value] = effectiveScript(d.value)
       localTemplate.value[d.value] = effectiveTemplate(d.value)
     }
