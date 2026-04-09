@@ -201,6 +201,8 @@ class TPromptTemplates(schema: String) : Table("$schema.prompt_templates") {
     val name        = text("name")
     val description = text("description").nullable()
     val content     = text("content")
+    val kind        = text("kind").default("evaluation")
+    val isSystem    = bool("is_system").default(false)
     val updatedAt   = long("updated_at")
 
     override val primaryKey = PrimaryKey(id)

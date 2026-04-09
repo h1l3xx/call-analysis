@@ -5,7 +5,7 @@ import { promptTemplatesApi } from '@/api'
 import type { PromptTemplateResponse } from '@/types'
 import {
   Loader2, Save, RotateCcw, AlertCircle, Check,
-  Sparkles, PhoneIncoming, PhoneOutgoing, Wand2, Building2,
+  Sparkles, PhoneIncoming, PhoneOutgoing, Wand2, Building2, Plus, Trash2,
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
@@ -23,13 +23,10 @@ const suggestionInput = ref<Record<string, string>>({})
 const generating = ref<Record<string, boolean>>({})
 const suggestions = ref<Record<string, string[]>>({})
 const selectedSuggestion = ref<Record<string, number>>({})
-
-const businessTemplateOrder = [
-  'eval_internal_incoming',
-  'eval_internal_outgoing',
-  'eval_external_incoming',
-  'eval_external_outgoing',
-] as const
+const creating = ref(false)
+const createName = ref('')
+const createDescription = ref('')
+const createDirection = ref<'internal_incoming' | 'internal_outgoing' | 'external_incoming' | 'external_outgoing'>('external_incoming')
 
 const templateMeta: Record<string, { icon: any; hint: string; title: string }> = {
   eval_internal_incoming: {
@@ -52,31 +49,14 @@ const templateMeta: Record<string, { icon: any; hint: string; title: string }> =
     title: 'Внешние исходящие',
     hint: 'Например: «Оценивать открытие разговора, аргументацию и работу с возражениями»',
   },
-  internal_eval: {
-    icon: PhoneIncoming,
-    title: 'Скрытый шаблон',
-    hint: 'Например: «Оценивать деловой тон, наличие конкретных договорённостей и соблюдение субординации»',
-  },
-  external_eval: {
-    icon: PhoneOutgoing,
-    title: 'Скрытый шаблон',
-    hint: 'Например: «Оценивать вежливость, выявление потребности и работу с возражениями»',
-  },
 }
-
-const visibleTemplates = computed(() => {
-  const map = new Map(templates.value.map(t => [t.id, t]))
-  return businessTemplateOrder
-    .map(id => map.get(id))
-    .filter(Boolean) as PromptTemplateResponse[]
-})
 
 const isDirty = (id: string) => {
   const tpl = templates.value.find((t) => t.id === id)
   return tpl ? editedContent.value[id] !== tpl.content : false
 }
 
-onMounted(async () => {
+async function loadTemplates() {
   try {
     const { data } = await promptTemplatesApi.list()
     templates.value = data
@@ -88,7 +68,9 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadTemplates)
 
 async function generateSuggestions(id: string) {
   const desc = suggestionInput.value[id]?.trim()
@@ -154,6 +136,39 @@ async function resetTemplate(id: string) {
     resetting.value[id] = false
   }
 }
+
+async function createTemplate() {
+  const name = createName.value.trim()
+  if (!name) return
+  creating.value = true
+  errorMsg.value['_global'] = ''
+  try {
+    await promptTemplatesApi.create({
+      name,
+      description: createDescription.value.trim() || undefined,
+      direction: createDirection.value,
+    })
+    createName.value = ''
+    createDescription.value = ''
+    await loadTemplates()
+  } catch (e: any) {
+    errorMsg.value['_global'] = e.response?.data?.error || 'Не удалось создать шаблон'
+  } finally {
+    creating.value = false
+  }
+}
+
+async function deleteTemplate(id: string) {
+  if (!confirm('Удалить шаблон оценки?')) return
+  errorMsg.value[id] = ''
+  successMsg.value[id] = ''
+  try {
+    await promptTemplatesApi.remove(id)
+    await loadTemplates()
+  } catch (e: any) {
+    errorMsg.value[id] = e.response?.data?.error || 'Не удалось удалить шаблон'
+  }
+}
 </script>
 
 <template>
@@ -175,8 +190,44 @@ async function resetTemplate(id: string) {
     </div>
 
     <div v-else class="space-y-8">
+      <div v-if="canEdit" class="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+        <h2 class="text-base font-semibold text-gray-900">Новая оценка</h2>
+        <p class="text-sm text-gray-500">Создайте дополнительный шаблон оценки и назначайте его в разделе Политики.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            v-model="createName"
+            type="text"
+            placeholder="Название шаблона"
+            class="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <select v-model="createDirection" class="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white">
+            <option value="internal_incoming">Внутренние входящие</option>
+            <option value="internal_outgoing">Внутренние исходящие</option>
+            <option value="external_incoming">Внешние входящие</option>
+            <option value="external_outgoing">Внешние исходящие</option>
+          </select>
+        </div>
+        <textarea
+          v-model="createDescription"
+          rows="2"
+          placeholder="Описание (необязательно)"
+          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none"
+        />
+        <div>
+          <button
+            class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            :disabled="creating || !createName.trim()"
+            @click="createTemplate"
+          >
+            <Loader2 v-if="creating" class="w-4 h-4 animate-spin" />
+            <Plus v-else class="w-4 h-4" />
+            Создать шаблон
+          </button>
+        </div>
+      </div>
+
       <div
-        v-for="tpl in visibleTemplates"
+        v-for="tpl in templates"
         :key="tpl.id"
         class="bg-white rounded-xl border border-gray-200 overflow-hidden"
       >
@@ -185,10 +236,18 @@ async function resetTemplate(id: string) {
           <div class="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
             <component :is="templateMeta[tpl.id]?.icon || Sparkles" class="w-5 h-5 text-primary-600" />
           </div>
-          <div>
+          <div class="flex-1">
             <h2 class="text-lg font-semibold text-gray-900">{{ templateMeta[tpl.id]?.title || tpl.name }}</h2>
             <p v-if="tpl.description" class="text-sm text-gray-500">{{ tpl.description }}</p>
           </div>
+          <button
+            v-if="canEdit && !tpl.isSystem"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100"
+            @click="deleteTemplate(tpl.id)"
+          >
+            <Trash2 class="w-3.5 h-3.5" />
+            Удалить
+          </button>
         </div>
 
         <div class="p-6 space-y-5">
@@ -284,7 +343,7 @@ async function resetTemplate(id: string) {
             </button>
             <button
               class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-              :disabled="resetting[tpl.id]"
+              :disabled="resetting[tpl.id] || !tpl.isSystem"
               @click="resetTemplate(tpl.id)"
             >
               <Loader2 v-if="resetting[tpl.id]" class="w-4 h-4 animate-spin" />

@@ -1,6 +1,7 @@
 package com.malikov.routing
 
 import com.malikov.auth.Role
+import com.malikov.dto.CreatePromptTemplateRequest
 import com.malikov.dto.SuggestRequest
 import com.malikov.dto.SuggestResponse
 import com.malikov.dto.UpdatePromptTemplateRequest
@@ -26,6 +27,12 @@ fun Route.promptTemplateRoutes(service: PromptTemplateService, evaluator: Intern
             call.respond(service.getById(p.schema!!, id))
         }
 
+        post {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val request = call.receive<CreatePromptTemplateRequest>()
+            call.respond(HttpStatusCode.Created, service.create(p.schema!!, request))
+        }
+
         put("/{id}") {
             val p = requireTenantRole(Role.CLIENT_ADMIN)
             val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing id")
@@ -46,6 +53,14 @@ fun Route.promptTemplateRoutes(service: PromptTemplateService, evaluator: Intern
             require(request.description.isNotBlank()) { "Описание не может быть пустым" }
             val suggestions = evaluator.generateSuggestions(id, request.description)
             call.respond(SuggestResponse(suggestions))
+        }
+
+        delete("/{id}") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing id")
+            val deleted = service.delete(p.schema!!, id)
+            if (deleted) call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "Template not found"))
         }
     }
 }

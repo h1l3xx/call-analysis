@@ -8,12 +8,22 @@ data class PromptTemplateResponse(
     val name: String,
     val description: String?,
     val content: String,
+    val kind: String = "evaluation",
+    val isSystem: Boolean = false,
     val updatedAt: Long,
 )
 
 @Serializable
 data class UpdatePromptTemplateRequest(
     val content: String,
+)
+
+@Serializable
+data class CreatePromptTemplateRequest(
+    val name: String,
+    val description: String? = null,
+    val content: String? = null,
+    val direction: String? = null,
 )
 
 @Serializable

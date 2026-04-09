@@ -2,7 +2,9 @@ package com.malikov.service
 
 import com.malikov.config.NotFoundException
 import com.malikov.db.PromptTemplateRepository
+import com.malikov.dto.CreatePromptTemplateRequest
 import com.malikov.dto.PromptTemplateResponse
+import java.util.UUID
 
 class PromptTemplateService(
     private val repo: PromptTemplateRepository,
@@ -30,11 +32,22 @@ class PromptTemplateService(
             "eval_external_incoming",
             "eval_external_outgoing",
         )
-        private val BUSINESS_IDS = listOf(
+        private val HIDDEN_TECHNICAL_IDS = setOf(
+            "internal_eval",
+            "external_eval",
+            "eval_internal",
+        )
+        private val CORE_DIRECTION_IDS = listOf(
             "eval_internal_incoming",
             "eval_internal_outgoing",
             "eval_external_incoming",
             "eval_external_outgoing",
+        )
+        private val ALLOWED_DIRECTIONS = setOf(
+            "internal_incoming",
+            "internal_outgoing",
+            "external_incoming",
+            "external_outgoing",
         )
 
         fun defaultContent(id: String): String = when (id) {
@@ -45,16 +58,24 @@ class PromptTemplateService(
     }
 
     fun list(schema: String): List<PromptTemplateResponse> {
-        val all = repo.findAll(schema).filter { it.id in KNOWN_IDS }
+        val all = repo.findAll(schema).filter { isEvaluationTemplate(it) && it.id !in HIDDEN_TECHNICAL_IDS }
         val byId = all.associateBy { it.id }
-        return BUSINESS_IDS.mapNotNull { byId[it] }
+        val orderedCore = CORE_DIRECTION_IDS.mapNotNull { byId[it] }
+        val rest = all
+            .filterNot { it.id in CORE_DIRECTION_IDS }
+            .sortedBy { it.name.lowercase() }
+        return orderedCore + rest
     }
 
-    fun getById(schema: String, id: String): PromptTemplateResponse =
-        repo.findById(schema, id) ?: throw NotFoundException("Prompt template '$id' not found")
+    fun getById(schema: String, id: String): PromptTemplateResponse {
+        val tpl = repo.findById(schema, id) ?: throw NotFoundException("Prompt template '$id' not found")
+        if (!isEvaluationTemplate(tpl)) throw NotFoundException("Prompt template '$id' not found")
+        return tpl
+    }
 
     fun update(schema: String, id: String, content: String): PromptTemplateResponse {
-        require(id in KNOWN_IDS) { "Unknown template: $id" }
+        val existing = getById(schema, id)
+        require(isEvaluationTemplate(existing)) { "Unknown template: $id" }
         require(content.isNotBlank()) { "Содержимое не может быть пустым" }
 
         val updated = repo.updateContent(schema, id, content)
@@ -63,12 +84,57 @@ class PromptTemplateService(
     }
 
     fun reset(schema: String, id: String): PromptTemplateResponse {
+        require(id in CORE_DIRECTION_IDS || id in KNOWN_IDS) {
+            "Reset доступен только для системных шаблонов"
+        }
         val default = defaultContent(id)
         require(default.isNotEmpty()) { "Unknown template id: $id" }
         repo.updateContent(schema, id, default)
         return getById(schema, id)
     }
 
+    fun create(schema: String, request: CreatePromptTemplateRequest): PromptTemplateResponse {
+        val name = request.name.trim()
+        require(name.isNotBlank()) { "Название не может быть пустым" }
+
+        val direction = request.direction?.trim()?.lowercase()
+        if (direction != null) {
+            require(direction in ALLOWED_DIRECTIONS) { "Unsupported direction '$direction'" }
+        }
+
+        val fallbackId = when (direction) {
+            "internal_incoming" -> "eval_internal_incoming"
+            "internal_outgoing" -> "eval_internal_outgoing"
+            "external_incoming" -> "eval_external_incoming"
+            "external_outgoing" -> "eval_external_outgoing"
+            else -> "eval_external_incoming"
+        }
+        val content = request.content?.trim()?.takeIf { it.isNotBlank() } ?: defaultContent(fallbackId)
+        val id = "eval_custom_${UUID.randomUUID().toString().replace("-", "").take(12)}"
+
+        return repo.create(
+            schema = schema,
+            id = id,
+            name = name,
+            description = request.description?.trim()?.takeIf { it.isNotBlank() },
+            content = content,
+            kind = "evaluation",
+            isSystem = false,
+        )
+    }
+
+    fun delete(schema: String, id: String): Boolean {
+        val existing = getById(schema, id)
+        require(!existing.isSystem) { "Системный шаблон нельзя удалить" }
+        return repo.deleteById(schema, id)
+    }
+
     fun getContent(schema: String, id: String): String =
         repo.findContentById(schema, id) ?: defaultContent(id)
+
+    private fun isEvaluationTemplate(tpl: PromptTemplateResponse): Boolean {
+        if (tpl.kind == "evaluation") return true
+        if (tpl.id.startsWith("eval_")) return true
+        return tpl.id in KNOWN_IDS
+    }
 }

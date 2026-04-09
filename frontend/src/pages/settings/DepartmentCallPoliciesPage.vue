@@ -23,14 +23,7 @@ const directions: { value: DepartmentPolicyCallDirection; label: string }[] = [
 const selectedScriptByKey = ref<Record<string, string>>({})
 const selectedTemplateByKey = ref<Record<string, string>>({})
 
-const templateOptions = computed(() =>
-  templates.value.filter(t => [
-    'eval_internal_incoming',
-    'eval_internal_outgoing',
-    'eval_external_incoming',
-    'eval_external_outgoing',
-  ].includes(t.id))
-)
+const templateOptions = computed(() => templates.value)
 
 function key(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
   return `${departmentId ?? 'global'}::${direction}`

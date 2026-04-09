@@ -40,7 +40,10 @@ class DepartmentCallPolicyService(
         }
         val scriptId = UUID.fromString(request.scriptId)
         scriptRepo.findById(schema, scriptId) ?: throw NotFoundException("Script not found")
-        promptRepo.findById(schema, request.promptTemplateId) ?: throw NotFoundException("Prompt template not found")
+        val prompt = promptRepo.findById(schema, request.promptTemplateId) ?: throw NotFoundException("Prompt template not found")
+        require(prompt.kind == "evaluation" || prompt.id.startsWith("eval_")) {
+            "Template '${request.promptTemplateId}' is not an evaluation template"
+        }
         val departmentId = request.departmentId?.let { UUID.fromString(it) }
 
         val row = repo.upsert(

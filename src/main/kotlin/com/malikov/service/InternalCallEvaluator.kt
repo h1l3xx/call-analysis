@@ -102,7 +102,11 @@ class InternalCallEvaluator(
                 "внутренних звонков (между сотрудниками)"
             "external_eval", "eval_external_incoming", "eval_external_outgoing" ->
                 "внешних звонков (менеджер — клиент)"
-            else -> "звонков"
+            else -> when {
+                templateId.contains("internal") -> "внутренних звонков (между сотрудниками)"
+                templateId.contains("external") -> "внешних звонков (менеджер — клиент)"
+                else -> "звонков"
+            }
         }
 
         val metaPrompt = """
