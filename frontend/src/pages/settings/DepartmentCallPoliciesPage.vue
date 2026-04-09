@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { callsApi, scriptsApi, promptTemplatesApi, departmentCallPoliciesApi } from '@/api'
+import { Network, Table2 } from 'lucide-vue-next'
 import type {
   DepartmentPolicyCallDirection,
   DepartmentCallPolicyResponse,
@@ -9,9 +10,13 @@ import type {
 } from '@/types'
 
 import PolicyGraph from '@/components/policies/PolicyGraph.vue'
+import PolicyTable from '@/components/policies/PolicyTable.vue'
 import DepartmentPolicyModal from '@/components/policies/DepartmentPolicyModal.vue'
 import EdgePolicyModal from '@/components/policies/EdgePolicyModal.vue'
 import AddEdgeModal from '@/components/policies/AddEdgeModal.vue'
+
+type ViewMode = 'graph' | 'table'
+const viewMode = ref<ViewMode>('graph')
 
 interface Dept {
   id: string
@@ -132,26 +137,59 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Политики скриптов и оценки</h1>
-      <p class="text-sm text-gray-500 mt-1">
-        Клик по узлу — настройка отдела. Клик по связи — политика между отделами.
-      </p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Политики скриптов и оценки</h1>
+        <p class="text-sm text-gray-500 mt-1">
+          {{ viewMode === 'graph' ? 'Клик по узлу — настройка отдела. Клик по связи — политика между отделами.' : 'Клик по строке — настройка отдела. Клик по карточке — политика между отделами.' }}
+        </p>
+      </div>
+      <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+          :class="viewMode === 'graph' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+          @click="viewMode = 'graph'"
+        >
+          <Network class="w-3.5 h-3.5" />
+          Граф
+        </button>
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+          :class="viewMode === 'table' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+          @click="viewMode = 'table'"
+        >
+          <Table2 class="w-3.5 h-3.5" />
+          Таблица
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="p-12 text-center text-gray-400 bg-white border border-gray-200 rounded-xl">
       Загрузка...
     </div>
 
-    <div v-else class="bg-white border border-gray-200 rounded-xl overflow-hidden" style="height: calc(100vh - 180px)">
-      <PolicyGraph
+    <template v-else>
+      <div v-if="viewMode === 'graph'" class="bg-white border border-gray-200 rounded-xl overflow-hidden" style="height: calc(100vh - 180px)">
+        <PolicyGraph
+          :departments="departments"
+          :policies="policies"
+          @node-click="onNodeClick"
+          @edge-click="onEdgeClick"
+          @add-edge="showAddEdge = true"
+        />
+      </div>
+
+      <PolicyTable
+        v-else
         :departments="departments"
         :policies="policies"
+        :scripts="scripts"
+        :templates="templates"
         @node-click="onNodeClick"
         @edge-click="onEdgeClick"
         @add-edge="showAddEdge = true"
       />
-    </div>
+    </template>
 
     <DepartmentPolicyModal
       :visible="showNodeModal"
