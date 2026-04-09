@@ -132,7 +132,7 @@ class CallService(
 
         data class ParsedFile(
             val audioFile: File, val filename: String,
-            val callType: CallType, val callTypeStr: String,
+            val callType: CallType, val callTypeStr: String, val callDirection: String,
             val matchedId: String?, val manager: ManagerRow?,
             val secondManager: ManagerRow?,
             val dedupKey: String?,
@@ -140,11 +140,11 @@ class CallService(
 
         val parsed = files.map { (audioFile, filename) ->
             val ct = PhoneParser.detectCallType(filename)
-            val ctStr = when (ct) {
-                CallType.INTERNAL -> { intCount++; "internal" }
-                CallType.EXTERNAL_INCOMING -> { extInCount++; "external" }
-                CallType.EXTERNAL_OUTGOING -> { extOutCount++; "external" }
-                CallType.UNKNOWN -> { unkCount++; "unknown" }
+            val (ctStr, dir) = when (ct) {
+                CallType.INTERNAL -> { intCount++; "internal" to "internal" }
+                CallType.EXTERNAL_INCOMING -> { extInCount++; "external" to "external_incoming" }
+                CallType.EXTERNAL_OUTGOING -> { extOutCount++; "external" to "external_outgoing" }
+                CallType.UNKNOWN -> { unkCount++; "unknown" to "unknown" }
             }
             val candidates = PhoneParser.extractManagerIdentifiers(filename)
             val match = managerRepo.findFirstByIdentifiers(schema, candidates)
@@ -157,7 +157,7 @@ class CallService(
 
             val dedupKey = PhoneParser.extractInternalCallKey(filename)
 
-            ParsedFile(audioFile, filename, ct, ctStr, match?.first, match?.second, secondMgr, dedupKey)
+            ParsedFile(audioFile, filename, ct, ctStr, dir, match?.first, match?.second, secondMgr, dedupKey)
         }
 
         val seenInternalKeys = mutableSetOf<String>()
@@ -212,6 +212,7 @@ class CallService(
                     source = "bulk_upload", audioS3Key = null,
                     audioFilename = p.filename, batchId = batchId,
                     callType = p.callTypeStr,
+                    callDirection = p.callDirection,
                     secondManagerId = p.secondManager?.id,
                 )
 
@@ -354,6 +355,7 @@ class CallService(
         status                 = status,
         source                 = source,
         callType               = callType,
+        callDirection          = callDirection,
         batchId                = batchId?.toString(),
         durationSeconds        = durationSeconds,
         createdAt              = createdAt,
@@ -373,6 +375,7 @@ class CallService(
         status                 = status,
         source                 = source,
         callType               = callType,
+        callDirection          = callDirection,
         batchId                = batchId?.toString(),
         audioS3Key             = audioS3Key,
         audioFilename          = audioFilename,

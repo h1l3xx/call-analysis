@@ -116,15 +116,15 @@ class BatchSummaryService(
         val t = TTranscriptions(schema)
         val qs = TQualityScores(schema)
         val m = TManagers(schema)
-        val m2 = TManagers(schema)
+        val m2 = TManagers(schema).alias("m2")
         val u2 = Users.alias("u2")
 
         cl.join(t, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, t.callId)
             .join(qs, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, qs.callId)
             .join(m, org.jetbrains.exposed.sql.JoinType.LEFT, cl.managerId, m.id)
             .join(Users, org.jetbrains.exposed.sql.JoinType.LEFT, m.userId, Users.id)
-            .join(m2, org.jetbrains.exposed.sql.JoinType.LEFT, cl.secondManagerId, m2.id)
-            .join(u2, org.jetbrains.exposed.sql.JoinType.LEFT, m2.userId, u2[Users.id])
+            .join(m2, org.jetbrains.exposed.sql.JoinType.LEFT, cl.secondManagerId, m2[m.id])
+            .join(u2, org.jetbrains.exposed.sql.JoinType.LEFT, m2[m.userId], u2[Users.id])
             .selectAll()
             .where { (cl.batchId eq batchId) and (cl.status eq "done") }
             .map { row ->
@@ -154,15 +154,15 @@ class BatchSummaryService(
         val t = TTranscriptions(schema)
         val qs = TQualityScores(schema)
         val m = TManagers(schema)
-        val m2 = TManagers(schema)
+        val m2 = TManagers(schema).alias("m2")
         val u2 = Users.alias("u2")
 
         var base = cl.join(t, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, t.callId)
             .join(qs, org.jetbrains.exposed.sql.JoinType.LEFT, cl.id, qs.callId)
             .join(m, org.jetbrains.exposed.sql.JoinType.LEFT, cl.managerId, m.id)
             .join(Users, org.jetbrains.exposed.sql.JoinType.LEFT, m.userId, Users.id)
-            .join(m2, org.jetbrains.exposed.sql.JoinType.LEFT, cl.secondManagerId, m2.id)
-            .join(u2, org.jetbrains.exposed.sql.JoinType.LEFT, m2.userId, u2[Users.id])
+            .join(m2, org.jetbrains.exposed.sql.JoinType.LEFT, cl.secondManagerId, m2[m.id])
+            .join(u2, org.jetbrains.exposed.sql.JoinType.LEFT, m2[m.userId], u2[Users.id])
 
         val conditions = mutableListOf(
             Op.build { cl.status eq "done" },

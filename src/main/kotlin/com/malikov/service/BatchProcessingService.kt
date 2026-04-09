@@ -21,7 +21,9 @@ class BatchProcessingService(
     private val resultWriter: PipelineResultWriter,
     private val batchRepo: BatchRepository,
     private val callRepo: CallRepository,
+    private val managerRepo: ManagerRepository,
     private val scriptRepo: ScriptRepository,
+    private val policyRepo: DepartmentCallPolicyRepository,
     private val internalCallEvaluator: InternalCallEvaluator,
     private val batchSummaryService: BatchSummaryService,
     private val batchNotificationService: BatchNotificationService?,
@@ -200,8 +202,11 @@ class BatchProcessingService(
     private suspend fun evaluateSingle(schema: String, callId: UUID) {
         val call = callRepo.findById(schema, callId) ?: return
         val callType = call.callType ?: "unknown"
+        val callDirection = resolveDirection(call)
+        val departmentId = call.managerId?.let { managerRepo.findById(schema, it)?.departmentId }
+        val policy = policyRepo.resolvePolicy(schema, departmentId, callDirection)
 
-        log.info("Phase B: evaluating call {} (type={})", callId, callType)
+        log.info("Phase B: evaluating call {} (type={}, direction={}, dept={})", callId, callType, callDirection, departmentId)
 
         try {
             val transcription = getTranscription(schema, callId)
@@ -216,14 +221,26 @@ class BatchProcessingService(
                 when {
                     callType == "internal" -> {
                         AppMetrics.callsInternal.increment()
-                        internalCallEvaluator.evaluate(schema, callId, transcription)
+                        if (policy != null) {
+                            evaluateByPolicy(schema, callId, transcription, policy)
+                        } else {
+                            internalCallEvaluator.evaluate(schema, callId, transcription)
+                        }
                     }
                     callType == "external" -> {
                         AppMetrics.callsExternal.increment()
-                        evaluateExternalCall(schema, callId, transcription)
+                        if (policy != null) {
+                            evaluateByPolicy(schema, callId, transcription, policy)
+                        } else {
+                            evaluateExternalCall(schema, callId, transcription)
+                        }
                     }
                     else -> {
-                        evaluateExternalCall(schema, callId, transcription)
+                        if (policy != null) {
+                            evaluateByPolicy(schema, callId, transcription, policy)
+                        } else {
+                            evaluateExternalCall(schema, callId, transcription)
+                        }
                     }
                 }
             })
@@ -260,6 +277,51 @@ class BatchProcessingService(
             internalCallEvaluator.evaluate(schema, callId, transcription)
         }
     }
+
+    private fun evaluateByPolicy(
+        schema: String,
+        callId: UUID,
+        transcription: String,
+        policy: DepartmentCallPolicyRow,
+    ) {
+        val scriptDetail = scriptRepo.findById(schema, policy.scriptId)
+        if (scriptDetail == null) {
+            log.warn("Policy script {} not found for call {}, using generic evaluation", policy.scriptId, callId)
+            internalCallEvaluator.evaluate(schema, callId, transcription, policy.promptTemplateId)
+            return
+        }
+
+        val criteria = scriptDetail.criteria.filter { it.isActive }.map { cr ->
+            PipelineCriterionInput(
+                id = cr.orderNum,
+                name = cr.name,
+                description = cr.description,
+                block = if (cr.groupType == "required") "main" else "additional",
+            )
+        }
+
+        if (criteria.isEmpty()) {
+            internalCallEvaluator.evaluate(schema, callId, transcription, policy.promptTemplateId)
+            return
+        }
+
+        val qualityJson = internalCallEvaluator.evaluateWithCriteria(
+            schema = schema,
+            transcription = transcription,
+            criteria = criteria,
+            scriptName = scriptDetail.script.name,
+            templateId = policy.promptTemplateId,
+        )
+
+        resultWriter.saveQualityFromJson(schema, callId, scriptDetail.script.id, qualityJson)
+    }
+
+    private fun resolveDirection(call: CallRow): String =
+        call.callDirection ?: when (call.callType) {
+            "internal" -> "internal"
+            "external" -> "external_incoming"
+            else -> "unknown"
+        }
 
     private fun getTranscription(schema: String, callId: UUID): String? = transaction {
         val t = TTranscriptions(schema)

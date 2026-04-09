@@ -28,6 +28,7 @@ class ServiceRegistry(config: AppConfig) {
     val departmentLeadRepository = DepartmentLeadRepository()
     val reportRepository         = ReportRepository()
     val promptTemplateRepository = PromptTemplateRepository()
+    val departmentCallPolicyRepository = DepartmentCallPolicyRepository()
 
     // Redis
     val redisService = RedisService(config.redis)
@@ -38,6 +39,9 @@ class ServiceRegistry(config: AppConfig) {
 
     // Prompt templates
     val promptTemplateService = PromptTemplateService(promptTemplateRepository)
+    val departmentCallPolicyService = DepartmentCallPolicyService(
+        departmentCallPolicyRepository, scriptRepository, promptTemplateRepository,
+    )
 
     // Pipeline (AI module integration)
     val pipelineClient       = PipelineClient(config.pipeline, config.pipeline.apiKey)
@@ -58,7 +62,8 @@ class ServiceRegistry(config: AppConfig) {
     // Batch processing orchestrator
     val batchProcessingService = BatchProcessingService(
         pipelineClient, pipelineResultWriter, batchRepository,
-        callRepository, scriptRepository, internalCallEvaluator, batchSummaryService,
+        callRepository, managerRepository, scriptRepository, departmentCallPolicyRepository,
+        internalCallEvaluator, batchSummaryService,
         batchNotificationService,
     )
 

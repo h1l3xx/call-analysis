@@ -106,6 +106,7 @@ fun Route.batchRoutes(
                     status = it.status,
                     source = it.source,
                     callType = it.callType,
+                    callDirection = it.callDirection,
                     batchId = it.batchId?.toString(),
                     durationSeconds = it.durationSeconds,
                     createdAt = it.createdAt,

@@ -67,6 +67,8 @@ class TenantAdminRepository {
 
         // Вызываем SQL-функцию создания схемы
         exec("SELECT public.create_tenant_schema('$dbSchema')")
+        exec("SELECT public.ensure_tenant_policy_structures('$dbSchema')")
+        exec("SELECT public.ensure_tenant_directional_prompt_templates('$dbSchema')")
 
         // Выдаём права
         exec("GRANT ALL ON SCHEMA $dbSchema TO malikov_app")

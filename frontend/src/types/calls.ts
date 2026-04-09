@@ -21,6 +21,7 @@ export interface CallResponse {
   status: CallStatus
   source: string
   callType: string | null
+  callDirection: string | null
   batchId: string | null
   durationSeconds: number | null
   createdAt: number
@@ -40,6 +41,7 @@ export interface CallDetailResponse {
   status: CallStatus
   source: string
   callType: string | null
+  callDirection: string | null
   batchId: string | null
   audioS3Key: string | null
   audioFilename: string | null

@@ -16,6 +16,7 @@ data class CallRow(
     val source: String,
     val batchId: UUID?,
     val callType: String?,
+    val callDirection: String? = null,
     val audioS3Key: String?,
     val audioFilename: String?,
     val durationSeconds: Int?,
@@ -149,6 +150,7 @@ class CallRepository {
         audioFilename: String?,
         batchId: UUID? = null,
         callType: String? = null,
+        callDirection: String? = null,
         secondManagerId: UUID? = null,
     ): UUID = transaction {
         val cl = TCalls(schema)
@@ -161,6 +163,7 @@ class CallRepository {
             it[cl.audioFilename] = audioFilename
             if (batchId != null) it[cl.batchId] = batchId
             if (callType != null) it[cl.callType] = callType
+            if (callDirection != null) it[cl.callDirection] = callDirection
             it[cl.createdAt]     = System.currentTimeMillis()
         }[cl.id]
     }
@@ -477,6 +480,7 @@ class CallRepository {
         source            = this[cl.callSource],
         batchId           = this[cl.batchId],
         callType          = this[cl.callType],
+        callDirection     = this[cl.callDirection],
         audioS3Key        = this[cl.audioS3Key],
         audioFilename     = this[cl.audioFilename],
         durationSeconds   = this[cl.durationSeconds],

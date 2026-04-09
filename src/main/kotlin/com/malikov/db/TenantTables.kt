@@ -91,6 +91,7 @@ class TCalls(schema: String) : Table("$schema.calls") {
     val scriptId        = uuid("script_id").nullable()
     val batchId         = uuid("batch_id").nullable()
     val callType        = text("call_type").nullable()
+    val callDirection   = text("call_direction").nullable()
     val status          = text("status").default("queued")
     val callSource      = text("source").default("direct")
     val audioS3Key      = text("audio_s3_key").nullable()
@@ -201,6 +202,18 @@ class TPromptTemplates(schema: String) : Table("$schema.prompt_templates") {
     val description = text("description").nullable()
     val content     = text("content")
     val updatedAt   = long("updated_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+class TDepartmentCallPolicies(schema: String) : Table("$schema.department_call_policies") {
+    val id               = uuid("id").autoGenerate()
+    val departmentId     = uuid("department_id").nullable()
+    val callDirection    = text("call_direction")
+    val scriptId         = uuid("script_id")
+    val promptTemplateId = text("prompt_template_id")
+    val createdAt        = long("created_at")
+    val updatedAt        = long("updated_at")
 
     override val primaryKey = PrimaryKey(id)
 }

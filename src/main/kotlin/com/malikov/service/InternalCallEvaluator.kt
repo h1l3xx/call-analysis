@@ -81,8 +81,8 @@ class InternalCallEvaluator(
         expectSuccess = false
     }
 
-    fun evaluate(schema: String, callId: UUID, transcription: String) {
-        val qualityJson = callLlmForInternalEvaluation(schema, transcription)
+    fun evaluate(schema: String, callId: UUID, transcription: String, templateId: String = "internal_eval") {
+        val qualityJson = callLlmForInternalEvaluation(schema, transcription, templateId)
         saveInternalQuality(schema, callId, qualityJson)
     }
 
@@ -91,8 +91,9 @@ class InternalCallEvaluator(
         transcription: String,
         criteria: List<PipelineCriterionInput>,
         scriptName: String,
+        templateId: String = "external_eval",
     ): String {
-        return callLlmForExternalEvaluation(schema, transcription, criteria, scriptName)
+        return callLlmForExternalEvaluation(schema, transcription, criteria, scriptName, templateId)
     }
 
     fun generateSuggestions(templateId: String, description: String): List<String> {
@@ -132,8 +133,8 @@ class InternalCallEvaluator(
         }
     }
 
-    private fun callLlmForInternalEvaluation(schema: String, transcription: String): String {
-        val userInstructions = getUserInstructions(schema, "internal_eval", PromptTemplateService.DEFAULT_INTERNAL_INSTRUCTIONS)
+    private fun callLlmForInternalEvaluation(schema: String, transcription: String, templateId: String): String {
+        val userInstructions = getUserInstructions(schema, templateId, PromptTemplateService.DEFAULT_INTERNAL_INSTRUCTIONS)
         val prompt = """
 Проанализируй следующий ВНУТРЕННИЙ телефонный разговор между сотрудниками компании.
 
@@ -154,8 +155,9 @@ $INTERNAL_JSON_FORMAT
         transcription: String,
         criteria: List<PipelineCriterionInput>,
         scriptName: String,
+        templateId: String,
     ): String {
-        val userInstructions = getUserInstructions(schema, "external_eval", PromptTemplateService.DEFAULT_EXTERNAL_INSTRUCTIONS)
+        val userInstructions = getUserInstructions(schema, templateId, PromptTemplateService.DEFAULT_EXTERNAL_INSTRUCTIONS)
         val criteriaList = criteria.joinToString("\n") { "  ${it.id}. ${it.name}: ${it.description}" }
         val prompt = """
 Проанализируй следующий разговор менеджера с клиентом по скрипту "$scriptName".

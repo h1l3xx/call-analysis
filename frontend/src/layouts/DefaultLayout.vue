@@ -17,6 +17,7 @@ import {
   Package,
   Sparkles,
   FileDown,
+  SlidersHorizontal,
 } from 'lucide-vue-next'
 import { useDarkMode } from '@/composables/useDarkMode'
 
@@ -37,6 +38,7 @@ const navItems = computed(() => {
       { to: '/managers', label: 'Менеджеры', icon: Users, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
       { to: '/export', label: 'Выгрузка', icon: FileDown, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
       { to: '/settings/prompts', label: 'Оценка', icon: Sparkles, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
+      { to: '/settings/policies', label: 'Политики', icon: SlidersHorizontal, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
       { to: '/settings', label: 'Настройки', icon: Settings, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
     )
   } else {

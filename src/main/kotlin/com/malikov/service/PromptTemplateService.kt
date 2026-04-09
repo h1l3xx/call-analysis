@@ -21,11 +21,17 @@ class PromptTemplateService(
 
         val DEFAULT_EXTERNAL_INSTRUCTIONS = "Оцени каждый критерий. Также напиши краткое описание звонка (2–3 предложения): кто обратился, с какой целью, чем закончился разговор."
 
-        private val KNOWN_IDS = setOf("internal_eval", "external_eval")
+        private val KNOWN_IDS = setOf(
+            "internal_eval",
+            "external_eval",
+            "eval_internal",
+            "eval_external_incoming",
+            "eval_external_outgoing",
+        )
 
         fun defaultContent(id: String): String = when (id) {
-            "internal_eval" -> DEFAULT_INTERNAL_INSTRUCTIONS
-            "external_eval" -> DEFAULT_EXTERNAL_INSTRUCTIONS
+            "internal_eval", "eval_internal" -> DEFAULT_INTERNAL_INSTRUCTIONS
+            "external_eval", "eval_external_incoming", "eval_external_outgoing" -> DEFAULT_EXTERNAL_INSTRUCTIONS
             else -> ""
         }
     }

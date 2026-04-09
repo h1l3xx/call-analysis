@@ -25,9 +25,19 @@ object PhoneParser {
     private val MANAGER_AFTER_COMMA = Regex(""",\s*(\d{3,5})\s*\(""")
     private val GENERIC_PHONE_CHUNK = Regex("""\+?[\d\-\s()]{7,}""")
     private val TIMESTAMP_PREFIX = Regex("""\d{2}\.\d{2}\.\d{4}_\d{2}-\d{2}-\d{2}""")
+    private val IN_OUT_PATTERN = Regex("""(?i)^(incall|outcall)_\d{8}_\d{4}_(\d{10,15})_(\d{10,15})(?:_|$)""")
 
     fun detectCallType(filename: String): CallType {
         val nameOnly = filename.substringBeforeLast('.')
+        val inOutMatch = IN_OUT_PATTERN.find(nameOnly)
+        if (inOutMatch != null) {
+            return when (inOutMatch.groupValues[1].lowercase(Locale.ROOT)) {
+                "incall" -> CallType.EXTERNAL_INCOMING
+                "outcall" -> CallType.EXTERNAL_OUTGOING
+                else -> CallType.UNKNOWN
+            }
+        }
+
         val forKind = nameOnly.normalizedForKindDetection()
         val isIncoming = forKind.contains("входящ")
         val isOutgoing = forKind.contains("исходящ")
@@ -46,6 +56,19 @@ object PhoneParser {
      */
     fun extractManagerIdentifiers(filename: String): List<String> {
         val nameOnly = filename.substringBeforeLast('.')
+        val inOutMatch = IN_OUT_PATTERN.find(nameOnly)
+        if (inOutMatch != null) {
+            // Формат: incall/outcall_DATE_TIME_numA_numB.
+            // Для incall обычно второй номер - менеджер, для outcall - первый.
+            val numA = normalizeRussianPhone(inOutMatch.groupValues[2].replace(Regex("[^0-9]"), ""))
+            val numB = normalizeRussianPhone(inOutMatch.groupValues[3].replace(Regex("[^0-9]"), ""))
+            return when (inOutMatch.groupValues[1].lowercase(Locale.ROOT)) {
+                "incall" -> listOf(numB, numA).distinct()
+                "outcall" -> listOf(numA, numB).distinct()
+                else -> listOf(numA, numB).distinct()
+            }
+        }
+
         val forKind = nameOnly.normalizedForKindDetection()
         val isIncoming = forKind.contains("входящ")
         val isOutgoing = forKind.contains("исходящ")
@@ -69,7 +92,7 @@ object PhoneParser {
         }
 
         if (ordered.isEmpty()) {
-            extractLongestPhoneDigits(nameOnly)?.let { ordered.add(normalizeRussianPhone(it)) }
+            extractRussianPhones(nameOnly).forEach { ordered.add(it) }
         }
 
         return ordered.toList()
@@ -110,11 +133,12 @@ object PhoneParser {
         return stripped.lowercase(Locale.ROOT)
     }
 
-    private fun extractLongestPhoneDigits(nameOnly: String): String? =
+    private fun extractRussianPhones(nameOnly: String): List<String> =
         GENERIC_PHONE_CHUNK.findAll(nameOnly)
             .map { it.value.replace(Regex("[^0-9]"), "") }
             .filter { it.length in 10..15 && looksLikeRussianPhone(it) }
-            .maxByOrNull { it.length }
+            .map { normalizeRussianPhone(it) }
+            .toList()
 
     /** Не принимать склейки из даты/времени (например 27032026054317). */
     private fun looksLikeRussianPhone(digits: String): Boolean = when (digits.length) {
