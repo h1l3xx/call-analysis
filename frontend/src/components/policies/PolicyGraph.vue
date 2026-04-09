@@ -42,7 +42,7 @@ watch(
   (deps) => {
     if (!deps.length) return
     if (Object.keys(layouts.value.nodes).length > 0) return
-    const radius = Math.max(180, deps.length * 50)
+    const radius = Math.max(140, deps.length * 45)
     const points = arrangeCircle(deps.length, radius)
     const nodes: Record<string, { x: number; y: number }> = {}
     deps.forEach((d, i) => {
@@ -87,18 +87,18 @@ function hasDepartmentOverride(deptId: string): boolean {
   )
 }
 
-function deptOverrideCount(deptId: string): number {
-  return props.policies.filter(
-    p => p.departmentId === deptId && !p.secondDepartmentId,
-  ).length
+function shortName(name: string): string {
+  if (name.length <= 16) return name
+  return name.slice(0, 14) + '…'
 }
+
+const NODE_RADIUS = 16
 
 const configs = computed(() => ({
   view: {
     autoPanAndZoomOnLoad: 'fit-content' as const,
     minZoomLevel: 0.2,
     maxZoomLevel: 4,
-    layoutHandler: undefined,
     grid: {
       visible: false,
     },
@@ -106,56 +106,50 @@ const configs = computed(() => ({
   node: {
     normal: {
       type: 'circle' as const,
-      radius: 32,
+      radius: NODE_RADIUS,
       color: (node: Record<string, unknown>) => {
         const dept = props.departments.find(d => d.name === node.name)
         if (dept && hasDepartmentOverride(dept.id)) return '#3b82f6'
-        return '#e5e7eb'
+        return '#cbd5e1'
       },
-      strokeWidth: 3,
+      strokeWidth: 2,
       strokeColor: (node: Record<string, unknown>) => {
         const dept = props.departments.find(d => d.name === node.name)
         if (dept && hasDepartmentOverride(dept.id)) return '#2563eb'
-        return '#d1d5db'
+        return '#94a3b8'
       },
     },
     hover: {
-      radius: 34,
+      radius: NODE_RADIUS + 2,
       color: '#2563eb',
       strokeColor: '#1d4ed8',
-      strokeWidth: 3,
+      strokeWidth: 2,
     },
     selected: {
-      radius: 34,
+      radius: NODE_RADIUS + 2,
       color: '#1d4ed8',
       strokeColor: '#1e40af',
-      strokeWidth: 3,
+      strokeWidth: 2,
     },
     focusring: {
       visible: false,
     },
     label: {
-      visible: true,
-      fontSize: 13,
-      fontFamily: 'Inter, system-ui, sans-serif',
-      color: '#1f2937',
-      direction: 'south' as const,
-      margin: 8,
+      visible: false,
     },
   },
   edge: {
     normal: {
       color: '#94a3b8',
-      width: 2,
-      dasharray: '0',
+      width: 1.5,
     },
     hover: {
       color: '#3b82f6',
-      width: 3,
+      width: 2.5,
     },
     selected: {
       color: '#2563eb',
-      width: 3,
+      width: 2.5,
     },
     marker: {
       target: { type: 'none' as const },
@@ -176,18 +170,11 @@ const eventHandlers = {
   },
 }
 
-function doZoomIn() {
-  graphRef.value?.zoomIn()
-}
-function doZoomOut() {
-  graphRef.value?.zoomOut()
-}
-function doFit() {
-  graphRef.value?.fitToContents({ margin: 0.12 })
-}
+function doZoomIn() { graphRef.value?.zoomIn() }
+function doZoomOut() { graphRef.value?.zoomOut() }
+function doFit() { graphRef.value?.fitToContents({ margin: 0.1 }) }
 
 const zoomPercent = computed(() => Math.round(zoomLevel.value * 100))
-
 const totalOverrides = computed(() =>
   props.policies.filter(p => p.departmentId && !p.secondDepartmentId).length,
 )
@@ -207,12 +194,12 @@ const totalPairs = computed(() => Object.keys(edges.value).length)
       v-model:zoom-level="zoomLevel"
     >
       <defs>
-        <filter id="nodeShadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000018" />
+        <filter id="nodeShadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000014" />
         </filter>
       </defs>
 
-      <template #override-node="{ nodeId, scale, config, ...slotProps }">
+      <template #override-node="{ nodeId, scale, config }">
         <circle
           :r="config.radius * scale"
           :fill="config.color"
@@ -221,40 +208,19 @@ const totalPairs = computed(() => Object.keys(edges.value).length)
           filter="url(#nodeShadow)"
           class="cursor-pointer"
         />
-        <text
-          y="1"
-          :font-size="14 * scale"
-          font-family="Inter, system-ui, sans-serif"
-          font-weight="600"
-          text-anchor="middle"
-          dominant-baseline="central"
-          :fill="hasDepartmentOverride(nodeId) ? '#ffffff' : '#6b7280'"
-          class="select-none pointer-events-none"
-        >{{ departments.find(d => d.id === nodeId)?.name?.slice(0, 2)?.toUpperCase() }}</text>
       </template>
 
-      <template #override-node-label="{ nodeId, scale, text, x, y, config, textAnchor }">
+      <template #override-node-label="{ nodeId, scale, x, y, textAnchor }">
         <text
           :x="x"
-          :y="y + 2 * scale"
-          :font-size="config.fontSize * scale"
+          :y="y + 4 * scale"
+          :font-size="11 * scale"
           font-family="Inter, system-ui, sans-serif"
           :text-anchor="textAnchor"
-          :fill="config.color"
+          fill="#374151"
           dominant-baseline="hanging"
           class="select-none pointer-events-none"
-        >{{ text }}</text>
-        <text
-          v-if="hasDepartmentOverride(nodeId)"
-          :x="x"
-          :y="y + 18 * scale"
-          :font-size="10 * scale"
-          font-family="Inter, system-ui, sans-serif"
-          :text-anchor="textAnchor"
-          fill="#6b7280"
-          dominant-baseline="hanging"
-          class="select-none pointer-events-none"
-        >{{ deptOverrideCount(nodeId) }} настр.</text>
+        >{{ shortName(departments.find(d => d.id === nodeId)?.name ?? '') }}</text>
       </template>
     </v-network-graph>
 
@@ -264,9 +230,7 @@ const totalPairs = computed(() => Object.keys(edges.value).length)
         class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
         title="Приблизить"
         @click="doZoomIn"
-      >
-        <ZoomIn class="w-4 h-4" />
-      </button>
+      ><ZoomIn class="w-4 h-4" /></button>
 
       <div class="text-[10px] font-medium text-gray-500 tabular-nums w-10 text-center">
         {{ zoomPercent }}%
@@ -276,9 +240,7 @@ const totalPairs = computed(() => Object.keys(edges.value).length)
         class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
         title="Отдалить"
         @click="doZoomOut"
-      >
-        <ZoomOut class="w-4 h-4" />
-      </button>
+      ><ZoomOut class="w-4 h-4" /></button>
 
       <div class="w-6 border-t border-gray-200 my-0.5" />
 
@@ -286,23 +248,21 @@ const totalPairs = computed(() => Object.keys(edges.value).length)
         class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
         title="Показать всё"
         @click="doFit"
-      >
-        <Maximize2 class="w-4 h-4" />
-      </button>
+      ><Maximize2 class="w-4 h-4" /></button>
     </div>
 
-    <!-- Legend / stats -->
-    <div class="absolute top-3 left-3 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl px-3 py-2.5 shadow-sm space-y-1.5">
+    <!-- Legend -->
+    <div class="absolute top-3 left-3 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl px-3 py-2 shadow-sm space-y-1.5">
       <div class="flex items-center gap-2">
-        <div class="w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-600 shrink-0" />
+        <div class="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-600 shrink-0" />
         <span class="text-[11px] text-gray-600">Настроено ({{ totalOverrides }})</span>
       </div>
       <div class="flex items-center gap-2">
-        <div class="w-3 h-3 rounded-full bg-gray-200 border-2 border-gray-300 shrink-0" />
+        <div class="w-2.5 h-2.5 rounded-full bg-slate-300 border border-slate-400 shrink-0" />
         <span class="text-[11px] text-gray-600">По умолчанию</span>
       </div>
       <div v-if="totalPairs > 0" class="flex items-center gap-2">
-        <div class="w-3 h-0.5 bg-slate-400 shrink-0" />
+        <div class="w-3 h-px bg-slate-400 shrink-0" />
         <span class="text-[11px] text-gray-600">Связи ({{ totalPairs }})</span>
       </div>
     </div>
