@@ -26,8 +26,9 @@ class DepartmentCallPolicyService(
             DepartmentCallPolicyResponse(
                 id = it.id.toString(),
                 departmentId = it.departmentId?.toString(),
+                secondDepartmentId = it.secondDepartmentId?.toString(),
                 callDirection = it.callDirection,
-                scriptId = it.scriptId.toString(),
+                scriptId = it.scriptId?.toString(),
                 promptTemplateId = it.promptTemplateId,
                 createdAt = it.createdAt,
                 updatedAt = it.updatedAt,
@@ -38,17 +39,34 @@ class DepartmentCallPolicyService(
         require(request.callDirection in allowedDirections) {
             "Unsupported callDirection '${request.callDirection}'"
         }
-        val scriptId = UUID.fromString(request.scriptId)
-        scriptRepo.findById(schema, scriptId) ?: throw NotFoundException("Script not found")
+        val scriptId = request.scriptId?.let(UUID::fromString)
+        if (scriptId != null) {
+            scriptRepo.findById(schema, scriptId) ?: throw NotFoundException("Script not found")
+        }
         val prompt = promptRepo.findById(schema, request.promptTemplateId) ?: throw NotFoundException("Prompt template not found")
         require(prompt.kind == "evaluation" || prompt.id.startsWith("eval_")) {
             "Template '${request.promptTemplateId}' is not an evaluation template"
         }
         val departmentId = request.departmentId?.let { UUID.fromString(it) }
+        val secondDepartmentId = request.secondDepartmentId?.let { UUID.fromString(it) }
+        require(!(departmentId == null && secondDepartmentId != null)) {
+            "secondDepartmentId requires departmentId"
+        }
+        if (departmentId != null && secondDepartmentId != null) {
+            require(departmentId != secondDepartmentId) { "departmentId and secondDepartmentId must differ" }
+        }
+        val normalizedPair = if (departmentId != null && secondDepartmentId != null) {
+            val a = departmentId.toString()
+            val b = secondDepartmentId.toString()
+            if (a <= b) departmentId to secondDepartmentId else secondDepartmentId to departmentId
+        } else {
+            departmentId to secondDepartmentId
+        }
 
         val row = repo.upsert(
             schema = schema,
-            departmentId = departmentId,
+            departmentId = normalizedPair.first,
+            secondDepartmentId = normalizedPair.second,
             callDirection = request.callDirection,
             scriptId = scriptId,
             promptTemplateId = request.promptTemplateId,
@@ -57,8 +75,9 @@ class DepartmentCallPolicyService(
         return DepartmentCallPolicyResponse(
             id = row.id.toString(),
             departmentId = row.departmentId?.toString(),
+            secondDepartmentId = row.secondDepartmentId?.toString(),
             callDirection = row.callDirection,
-            scriptId = row.scriptId.toString(),
+            scriptId = row.scriptId?.toString(),
             promptTemplateId = row.promptTemplateId,
             createdAt = row.createdAt,
             updatedAt = row.updatedAt,

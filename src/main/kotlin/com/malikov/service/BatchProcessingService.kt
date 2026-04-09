@@ -204,9 +204,13 @@ class BatchProcessingService(
         val callType = call.callType ?: "unknown"
         val callDirection = resolveDirection(call)
         val departmentId = call.managerId?.let { managerRepo.findById(schema, it)?.departmentId }
-        val policy = policyRepo.resolvePolicy(schema, departmentId, callDirection)
+        val secondDepartmentId = call.secondManagerId?.let { managerRepo.findById(schema, it)?.departmentId }
+        val policy = policyRepo.resolvePolicy(schema, departmentId, secondDepartmentId, callDirection)
 
-        log.info("Phase B: evaluating call {} (type={}, direction={}, dept={})", callId, callType, callDirection, departmentId)
+        log.info(
+            "Phase B: evaluating call {} (type={}, direction={}, dept={}, secondDept={})",
+            callId, callType, callDirection, departmentId, secondDepartmentId
+        )
 
         try {
             val transcription = getTranscription(schema, callId)
@@ -222,7 +226,7 @@ class BatchProcessingService(
                     callType == "internal" -> {
                         AppMetrics.callsInternal.increment()
                         if (policy != null) {
-                            evaluateByPolicy(schema, callId, transcription, policy)
+                            evaluateByPolicy(schema, callId, callType, transcription, policy)
                         } else {
                             internalCallEvaluator.evaluate(schema, callId, transcription)
                         }
@@ -230,14 +234,14 @@ class BatchProcessingService(
                     callType == "external" -> {
                         AppMetrics.callsExternal.increment()
                         if (policy != null) {
-                            evaluateByPolicy(schema, callId, transcription, policy)
+                            evaluateByPolicy(schema, callId, callType, transcription, policy)
                         } else {
                             evaluateExternalCall(schema, callId, transcription)
                         }
                     }
                     else -> {
                         if (policy != null) {
-                            evaluateByPolicy(schema, callId, transcription, policy)
+                            evaluateByPolicy(schema, callId, callType, transcription, policy)
                         } else {
                             evaluateExternalCall(schema, callId, transcription)
                         }
@@ -281,13 +285,28 @@ class BatchProcessingService(
     private fun evaluateByPolicy(
         schema: String,
         callId: UUID,
+        callType: String,
         transcription: String,
         policy: DepartmentCallPolicyRow,
     ) {
-        val scriptDetail = scriptRepo.findById(schema, policy.scriptId)
+        val scriptDetail = policy.scriptId?.let { scriptRepo.findById(schema, it) }
+        if (policy.scriptId != null && scriptDetail == null) {
+            log.warn("Policy script {} not found for call {}, using template-only evaluation", policy.scriptId, callId)
+        }
+
         if (scriptDetail == null) {
-            log.warn("Policy script {} not found for call {}, using generic evaluation", policy.scriptId, callId)
-            internalCallEvaluator.evaluate(schema, callId, transcription, policy.promptTemplateId)
+            if (callType == "internal") {
+                internalCallEvaluator.evaluate(schema, callId, transcription, policy.promptTemplateId)
+            } else {
+                val qualityJson = internalCallEvaluator.evaluateWithCriteria(
+                    schema = schema,
+                    transcription = transcription,
+                    criteria = emptyList(),
+                    scriptName = "Без скрипта",
+                    templateId = policy.promptTemplateId,
+                )
+                resultWriter.saveQualityFromJson(schema, callId, null, qualityJson)
+            }
             return
         }
 
@@ -301,7 +320,18 @@ class BatchProcessingService(
         }
 
         if (criteria.isEmpty()) {
-            internalCallEvaluator.evaluate(schema, callId, transcription, policy.promptTemplateId)
+            if (callType == "internal") {
+                internalCallEvaluator.evaluate(schema, callId, transcription, policy.promptTemplateId)
+            } else {
+                val qualityJson = internalCallEvaluator.evaluateWithCriteria(
+                    schema = schema,
+                    transcription = transcription,
+                    criteria = emptyList(),
+                    scriptName = scriptDetail.script.name,
+                    templateId = policy.promptTemplateId,
+                )
+                resultWriter.saveQualityFromJson(schema, callId, scriptDetail.script.id, qualityJson)
+            }
             return
         }
 

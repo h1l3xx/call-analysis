@@ -43,12 +43,6 @@ class PromptTemplateService(
             "eval_external_incoming",
             "eval_external_outgoing",
         )
-        private val ALLOWED_DIRECTIONS = setOf(
-            "internal_incoming",
-            "internal_outgoing",
-            "external_incoming",
-            "external_outgoing",
-        )
 
         fun defaultContent(id: String): String = when (id) {
             "internal_eval", "eval_internal", "eval_internal_incoming", "eval_internal_outgoing" -> DEFAULT_INTERNAL_INSTRUCTIONS
@@ -96,20 +90,7 @@ class PromptTemplateService(
     fun create(schema: String, request: CreatePromptTemplateRequest): PromptTemplateResponse {
         val name = request.name.trim()
         require(name.isNotBlank()) { "Название не может быть пустым" }
-
-        val direction = request.direction?.trim()?.lowercase()
-        if (direction != null) {
-            require(direction in ALLOWED_DIRECTIONS) { "Unsupported direction '$direction'" }
-        }
-
-        val fallbackId = when (direction) {
-            "internal_incoming" -> "eval_internal_incoming"
-            "internal_outgoing" -> "eval_internal_outgoing"
-            "external_incoming" -> "eval_external_incoming"
-            "external_outgoing" -> "eval_external_outgoing"
-            else -> "eval_external_incoming"
-        }
-        val content = request.content?.trim()?.takeIf { it.isNotBlank() } ?: defaultContent(fallbackId)
+        val content = request.content?.trim()?.takeIf { it.isNotBlank() } ?: DEFAULT_EXTERNAL_INSTRUCTIONS
         val id = "eval_custom_${UUID.randomUUID().toString().replace("-", "").take(12)}"
 
         return repo.create(

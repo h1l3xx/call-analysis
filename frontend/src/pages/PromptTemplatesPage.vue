@@ -26,7 +26,6 @@ const selectedSuggestion = ref<Record<string, number>>({})
 const creating = ref(false)
 const createName = ref('')
 const createDescription = ref('')
-const createDirection = ref<'internal_incoming' | 'internal_outgoing' | 'external_incoming' | 'external_outgoing'>('external_incoming')
 
 const templateMeta: Record<string, { icon: any; hint: string; title: string }> = {
   eval_internal_incoming: {
@@ -146,7 +145,6 @@ async function createTemplate() {
     await promptTemplatesApi.create({
       name,
       description: createDescription.value.trim() || undefined,
-      direction: createDirection.value,
     })
     createName.value = ''
     createDescription.value = ''
@@ -192,20 +190,14 @@ async function deleteTemplate(id: string) {
     <div v-else class="space-y-8">
       <div v-if="canEdit" class="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
         <h2 class="text-base font-semibold text-gray-900">Новая оценка</h2>
-        <p class="text-sm text-gray-500">Создайте дополнительный шаблон оценки и назначайте его в разделе Политики.</p>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <p class="text-sm text-gray-500">Создайте дополнительный шаблон оценки. Он не привязан к типу звонка и может назначаться в политиках для любого отдела/направления.</p>
+        <div class="grid grid-cols-1 gap-3">
           <input
             v-model="createName"
             type="text"
             placeholder="Название шаблона"
             class="rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
-          <select v-model="createDirection" class="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white">
-            <option value="internal_incoming">Внутренние входящие</option>
-            <option value="internal_outgoing">Внутренние исходящие</option>
-            <option value="external_incoming">Внешние входящие</option>
-            <option value="external_outgoing">Внешние исходящие</option>
-          </select>
         </div>
         <textarea
           v-model="createDescription"

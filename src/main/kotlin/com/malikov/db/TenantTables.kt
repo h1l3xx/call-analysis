@@ -211,8 +211,9 @@ class TPromptTemplates(schema: String) : Table("$schema.prompt_templates") {
 class TDepartmentCallPolicies(schema: String) : Table("$schema.department_call_policies") {
     val id               = uuid("id").autoGenerate()
     val departmentId     = uuid("department_id").nullable()
+    val secondDepartmentId = uuid("second_department_id").nullable()
     val callDirection    = text("call_direction")
-    val scriptId         = uuid("script_id")
+    val scriptId         = uuid("script_id").nullable()
     val promptTemplateId = text("prompt_template_id")
     val createdAt        = long("created_at")
     val updatedAt        = long("updated_at")

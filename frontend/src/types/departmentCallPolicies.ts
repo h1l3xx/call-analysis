@@ -8,8 +8,9 @@ export type DepartmentPolicyCallDirection =
 export interface DepartmentCallPolicyResponse {
   id: string
   departmentId: string | null
+  secondDepartmentId: string | null
   callDirection: DepartmentPolicyCallDirection
-  scriptId: string
+  scriptId: string | null
   promptTemplateId: string
   createdAt: number
   updatedAt: number
@@ -17,8 +18,9 @@ export interface DepartmentCallPolicyResponse {
 
 export interface UpsertDepartmentCallPolicyRequest {
   departmentId?: string | null
+  secondDepartmentId?: string | null
   callDirection: DepartmentPolicyCallDirection
-  scriptId: string
+  scriptId?: string | null
   promptTemplateId: string
 }
 

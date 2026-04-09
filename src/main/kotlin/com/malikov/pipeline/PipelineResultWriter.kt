@@ -137,7 +137,7 @@ class PipelineResultWriter {
     fun saveQualityFromJson(
         schema: String,
         callId: UUID,
-        scriptId: UUID,
+        scriptId: UUID?,
         qualityJson: String,
     ) = transaction {
         val qs = TQualityScores(schema)
@@ -166,7 +166,7 @@ class PipelineResultWriter {
             it[qs.processedAt] = System.currentTimeMillis()
         }
 
-        log.info("Quality from LLM saved for call {} [script={}, score={}]", callId, scriptId, overallScore)
+        log.info("Quality from LLM saved for call {} [script={}, score={}]", callId, scriptId ?: "none", overallScore)
     }
 
     // ── private writers ─────────────────────────────────────────────

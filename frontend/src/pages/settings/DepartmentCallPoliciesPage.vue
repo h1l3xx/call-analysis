@@ -11,6 +11,7 @@ const scripts = ref<ScriptResponse[]>([])
 const templates = ref<PromptTemplateResponse[]>([])
 const policies = ref<DepartmentCallPolicyResponse[]>([])
 const expandedDeptIds = ref<string[]>([])
+const peerDepartmentByDept = ref<Record<string, string>>({})
 
 const directions: { value: DepartmentPolicyCallDirection; label: string }[] = [
   { value: 'internal_incoming', label: 'Внутренние входящие' },
@@ -22,15 +23,37 @@ const directions: { value: DepartmentPolicyCallDirection; label: string }[] = [
 
 const selectedScriptByKey = ref<Record<string, string>>({})
 const selectedTemplateByKey = ref<Record<string, string>>({})
+const internalDirections: DepartmentPolicyCallDirection[] = ['internal_incoming', 'internal_outgoing']
 
 const templateOptions = computed(() => templates.value)
 
-function key(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
-  return `${departmentId ?? 'global'}::${direction}`
+function key(
+  departmentId: string | null,
+  secondDepartmentId: string | null,
+  direction: DepartmentPolicyCallDirection,
+): string {
+  return `${departmentId ?? 'global'}::${secondDepartmentId ?? 'none'}::${direction}`
 }
 
-function getPolicy(departmentId: string | null, direction: DepartmentPolicyCallDirection): DepartmentCallPolicyResponse | undefined {
-  return policies.value.find(p => p.departmentId === departmentId && p.callDirection === direction)
+function getPolicy(
+  departmentId: string | null,
+  secondDepartmentId: string | null,
+  direction: DepartmentPolicyCallDirection,
+): DepartmentCallPolicyResponse | undefined {
+  if (departmentId && secondDepartmentId) {
+    return policies.value.find(p =>
+      p.callDirection === direction && (
+        (p.departmentId === departmentId && p.secondDepartmentId === secondDepartmentId) ||
+        (p.departmentId === secondDepartmentId && p.secondDepartmentId === departmentId)
+      )
+    )
+  }
+  return policies.value.find(
+    p =>
+      p.departmentId === departmentId &&
+      p.secondDepartmentId === secondDepartmentId &&
+      p.callDirection === direction,
+  )
 }
 
 function defaultTemplate(direction: DepartmentPolicyCallDirection): string {
@@ -41,37 +64,61 @@ function defaultTemplate(direction: DepartmentPolicyCallDirection): string {
   return 'eval_external_incoming'
 }
 
-function effectiveScript(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
-  const exact = getPolicy(departmentId, direction)
+function effectiveScript(
+  departmentId: string | null,
+  secondDepartmentId: string | null,
+  direction: DepartmentPolicyCallDirection,
+): string {
+  const exact = getPolicy(departmentId, secondDepartmentId, direction)
   if (exact?.scriptId) return exact.scriptId
-  const global = getPolicy(null, direction)
+  if (departmentId && secondDepartmentId) {
+    const byDept = getPolicy(departmentId, null, direction)
+    if (byDept?.scriptId) return byDept.scriptId
+  }
+  const global = getPolicy(null, null, direction)
   if (global?.scriptId) return global.scriptId
-  return scripts.value[0]?.id || ''
+  return ''
 }
 
-function effectiveTemplate(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
-  const exact = getPolicy(departmentId, direction)
+function effectiveTemplate(
+  departmentId: string | null,
+  secondDepartmentId: string | null,
+  direction: DepartmentPolicyCallDirection,
+): string {
+  const exact = getPolicy(departmentId, secondDepartmentId, direction)
   if (exact?.promptTemplateId) return exact.promptTemplateId
-  const global = getPolicy(null, direction)
+  if (departmentId && secondDepartmentId) {
+    const byDept = getPolicy(departmentId, null, direction)
+    if (byDept?.promptTemplateId) return byDept.promptTemplateId
+  }
+  const global = getPolicy(null, null, direction)
   if (global?.promptTemplateId) return global.promptTemplateId
   return defaultTemplate(direction)
 }
 
 function isInherited(departmentId: string, direction: DepartmentPolicyCallDirection): boolean {
-  return !getPolicy(departmentId, direction)
+  return !getPolicy(departmentId, null, direction)
 }
 
 function initSelection() {
   for (const d of directions) {
-    const k = key(null, d.value)
-    selectedScriptByKey.value[k] = effectiveScript(null, d.value)
-    selectedTemplateByKey.value[k] = effectiveTemplate(null, d.value)
+    const k = key(null, null, d.value)
+    selectedScriptByKey.value[k] = effectiveScript(null, null, d.value)
+    selectedTemplateByKey.value[k] = effectiveTemplate(null, null, d.value)
   }
   for (const dep of departments.value) {
     for (const d of directions) {
-      const k = key(dep.id, d.value)
-      selectedScriptByKey.value[k] = effectiveScript(dep.id, d.value)
-      selectedTemplateByKey.value[k] = effectiveTemplate(dep.id, d.value)
+      const k = key(dep.id, null, d.value)
+      selectedScriptByKey.value[k] = effectiveScript(dep.id, null, d.value)
+      selectedTemplateByKey.value[k] = effectiveTemplate(dep.id, null, d.value)
+    }
+    const peer = peerDepartmentByDept.value[dep.id]
+    if (peer) {
+      for (const d of internalDirections) {
+        const k = key(dep.id, peer, d)
+        selectedScriptByKey.value[k] = effectiveScript(dep.id, peer, d)
+        selectedTemplateByKey.value[k] = effectiveTemplate(dep.id, peer, d)
+      }
     }
   }
 }
@@ -86,6 +133,12 @@ async function load() {
       departmentCallPoliciesApi.list(),
     ])
     departments.value = deptRes.data
+    for (const dep of departments.value) {
+      if (!peerDepartmentByDept.value[dep.id]) {
+        const peer = departments.value.find(d => d.id !== dep.id)
+        if (peer) peerDepartmentByDept.value[dep.id] = peer.id
+      }
+    }
     scripts.value = scriptRes.data.items
     templates.value = tplRes.data
     policies.value = policyRes.data
@@ -95,18 +148,23 @@ async function load() {
   }
 }
 
-async function saveRow(departmentId: string | null, direction: DepartmentPolicyCallDirection) {
-  const k = key(departmentId, direction)
+async function saveRow(
+  departmentId: string | null,
+  secondDepartmentId: string | null,
+  direction: DepartmentPolicyCallDirection,
+) {
+  const k = key(departmentId, secondDepartmentId, direction)
   const scriptId = selectedScriptByKey.value[k]
   const promptTemplateId = selectedTemplateByKey.value[k]
-  if (!scriptId || !promptTemplateId) return
+  if (!promptTemplateId) return
 
   savingKey.value = k
   try {
     await departmentCallPoliciesApi.upsert({
       departmentId,
+      secondDepartmentId,
       callDirection: direction,
-      scriptId,
+      scriptId: scriptId || null,
       promptTemplateId,
     })
     const { data } = await departmentCallPoliciesApi.list()
@@ -118,15 +176,15 @@ async function saveRow(departmentId: string | null, direction: DepartmentPolicyC
 
 async function applyGlobalToDepartment(departmentId: string) {
   for (const d of directions) {
-    selectedScriptByKey.value[key(departmentId, d.value)] = selectedScriptByKey.value[key(null, d.value)]
-    selectedTemplateByKey.value[key(departmentId, d.value)] = selectedTemplateByKey.value[key(null, d.value)]
-    await saveRow(departmentId, d.value)
+    selectedScriptByKey.value[key(departmentId, null, d.value)] = selectedScriptByKey.value[key(null, null, d.value)]
+    selectedTemplateByKey.value[key(departmentId, null, d.value)] = selectedTemplateByKey.value[key(null, null, d.value)]
+    await saveRow(departmentId, null, d.value)
   }
 }
 
 async function resetToGlobal(departmentId: string) {
   for (const d of directions) {
-    const k = key(departmentId, d.value)
+    const k = key(departmentId, null, d.value)
     savingKey.value = k
     try {
       await departmentCallPoliciesApi.removeDepartmentOverride(departmentId, d.value)
@@ -139,6 +197,16 @@ async function resetToGlobal(departmentId: string) {
   const { data } = await departmentCallPoliciesApi.list()
   policies.value = data
   initSelection()
+}
+
+function onPeerDepartmentChange(departmentId: string) {
+  const peer = peerDepartmentByDept.value[departmentId]
+  if (!peer) return
+  for (const d of internalDirections) {
+    const k = key(departmentId, peer, d)
+    selectedScriptByKey.value[k] = effectiveScript(departmentId, peer, d)
+    selectedTemplateByKey.value[k] = effectiveTemplate(departmentId, peer, d)
+  }
 }
 
 function toggleDepartment(departmentId: string) {
@@ -173,23 +241,24 @@ onMounted(load)
         >
           <div class="text-sm text-gray-700">{{ d.label }}</div>
           <select
-            v-model="selectedScriptByKey[key(null, d.value)]"
+            v-model="selectedScriptByKey[key(null, null, d.value)]"
             class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
           >
+            <option value="">Без скрипта</option>
             <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
           </select>
           <select
-            v-model="selectedTemplateByKey[key(null, d.value)]"
+            v-model="selectedTemplateByKey[key(null, null, d.value)]"
             class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
           >
             <option v-for="t in templateOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
           </select>
           <button
             class="px-3 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-50"
-            :disabled="savingKey === key(null, d.value)"
-            @click="saveRow(null, d.value)"
+            :disabled="savingKey === key(null, null, d.value)"
+            @click="saveRow(null, null, d.value)"
           >
-            {{ savingKey === key(null, d.value) ? 'Сохранение...' : 'Сохранить' }}
+            {{ savingKey === key(null, null, d.value) ? 'Сохранение...' : 'Сохранить' }}
           </button>
         </div>
       </div>
@@ -231,13 +300,14 @@ onMounted(load)
             >
               <div class="text-sm text-gray-700">{{ d.label }}</div>
               <select
-                v-model="selectedScriptByKey[key(dep.id, d.value)]"
+                v-model="selectedScriptByKey[key(dep.id, null, d.value)]"
                 class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
               >
+                <option value="">Без скрипта</option>
                 <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
               </select>
               <select
-                v-model="selectedTemplateByKey[key(dep.id, d.value)]"
+                v-model="selectedTemplateByKey[key(dep.id, null, d.value)]"
                 class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
               >
                 <option v-for="t in templateOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
@@ -250,11 +320,53 @@ onMounted(load)
               </span>
               <button
                 class="px-3 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-50"
-                :disabled="savingKey === key(dep.id, d.value)"
-                @click="saveRow(dep.id, d.value)"
+                :disabled="savingKey === key(dep.id, null, d.value)"
+                @click="saveRow(dep.id, null, d.value)"
               >
-                {{ savingKey === key(dep.id, d.value) ? 'Сохранение...' : 'Сохранить' }}
+                {{ savingKey === key(dep.id, null, d.value) ? 'Сохранение...' : 'Сохранить' }}
               </button>
+            </div>
+
+            <div class="pt-2 mt-2 border-t border-gray-100 space-y-2">
+              <div class="text-xs font-semibold text-gray-500 uppercase">Между отделами</div>
+              <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-2 items-center">
+                <div class="text-sm text-gray-700">С кем общается отдел</div>
+                <select
+                  v-model="peerDepartmentByDept[dep.id]"
+                  class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  @change="onPeerDepartmentChange(dep.id)"
+                >
+                  <option v-for="d2 in departments.filter(x => x.id !== dep.id)" :key="d2.id" :value="d2.id">{{ d2.name }}</option>
+                </select>
+              </div>
+
+              <div
+                v-for="d in directions.filter(x => x.value === 'internal_incoming' || x.value === 'internal_outgoing')"
+                :key="`pair-${dep.id}-${d.value}`"
+                class="grid grid-cols-1 lg:grid-cols-[240px_1fr_1fr_120px] gap-2 items-center"
+              >
+                <div class="text-sm text-gray-700">{{ d.label }}</div>
+                <select
+                  v-model="selectedScriptByKey[key(dep.id, peerDepartmentByDept[dep.id] || null, d.value)]"
+                  class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                >
+                  <option value="">Без скрипта</option>
+                  <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+                <select
+                  v-model="selectedTemplateByKey[key(dep.id, peerDepartmentByDept[dep.id] || null, d.value)]"
+                  class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                >
+                  <option v-for="t in templateOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
+                </select>
+                <button
+                  class="px-3 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-50"
+                  :disabled="savingKey === key(dep.id, peerDepartmentByDept[dep.id] || null, d.value) || !peerDepartmentByDept[dep.id]"
+                  @click="saveRow(dep.id, peerDepartmentByDept[dep.id] || null, d.value)"
+                >
+                  {{ savingKey === key(dep.id, peerDepartmentByDept[dep.id] || null, d.value) ? 'Сохранение...' : 'Сохранить' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>

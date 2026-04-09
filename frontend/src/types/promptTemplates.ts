@@ -12,7 +12,6 @@ export interface CreatePromptTemplateRequest {
   name: string
   description?: string
   content?: string
-  direction?: 'internal_incoming' | 'internal_outgoing' | 'external_incoming' | 'external_outgoing'
 }
 
 export interface SuggestResponse {
