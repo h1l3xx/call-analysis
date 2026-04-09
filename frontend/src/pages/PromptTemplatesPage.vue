@@ -5,7 +5,7 @@ import { promptTemplatesApi } from '@/api'
 import type { PromptTemplateResponse } from '@/types'
 import {
   Loader2, Save, RotateCcw, AlertCircle, Check,
-  Sparkles, PhoneIncoming, PhoneOutgoing, Wand2,
+  Sparkles, PhoneIncoming, PhoneOutgoing, Wand2, Building2,
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
@@ -24,16 +24,52 @@ const generating = ref<Record<string, boolean>>({})
 const suggestions = ref<Record<string, string[]>>({})
 const selectedSuggestion = ref<Record<string, number>>({})
 
-const templateMeta: Record<string, { icon: any; hint: string }> = {
+const businessTemplateOrder = [
+  'eval_internal_incoming',
+  'eval_internal_outgoing',
+  'eval_external_incoming',
+  'eval_external_outgoing',
+] as const
+
+const templateMeta: Record<string, { icon: any; hint: string; title: string }> = {
+  eval_internal_incoming: {
+    icon: Building2,
+    title: 'Внутренние входящие',
+    hint: 'Например: «Оценивать деловой тон, точность постановки задачи и фиксацию договорённостей»',
+  },
+  eval_internal_outgoing: {
+    icon: Building2,
+    title: 'Внутренние исходящие',
+    hint: 'Например: «Оценивать инициативность, структуру коммуникации и контроль результата»',
+  },
+  eval_external_incoming: {
+    icon: PhoneIncoming,
+    title: 'Внешние входящие',
+    hint: 'Например: «Оценивать выявление потребности и корректную обработку входящего запроса»',
+  },
+  eval_external_outgoing: {
+    icon: PhoneOutgoing,
+    title: 'Внешние исходящие',
+    hint: 'Например: «Оценивать открытие разговора, аргументацию и работу с возражениями»',
+  },
   internal_eval: {
     icon: PhoneIncoming,
+    title: 'Скрытый шаблон',
     hint: 'Например: «Оценивать деловой тон, наличие конкретных договорённостей и соблюдение субординации»',
   },
   external_eval: {
     icon: PhoneOutgoing,
+    title: 'Скрытый шаблон',
     hint: 'Например: «Оценивать вежливость, выявление потребности и работу с возражениями»',
   },
 }
+
+const visibleTemplates = computed(() => {
+  const map = new Map(templates.value.map(t => [t.id, t]))
+  return businessTemplateOrder
+    .map(id => map.get(id))
+    .filter(Boolean) as PromptTemplateResponse[]
+})
 
 const isDirty = (id: string) => {
   const tpl = templates.value.find((t) => t.id === id)
@@ -140,7 +176,7 @@ async function resetTemplate(id: string) {
 
     <div v-else class="space-y-8">
       <div
-        v-for="tpl in templates"
+        v-for="tpl in visibleTemplates"
         :key="tpl.id"
         class="bg-white rounded-xl border border-gray-200 overflow-hidden"
       >
@@ -150,7 +186,7 @@ async function resetTemplate(id: string) {
             <component :is="templateMeta[tpl.id]?.icon || Sparkles" class="w-5 h-5 text-primary-600" />
           </div>
           <div>
-            <h2 class="text-lg font-semibold text-gray-900">{{ tpl.name }}</h2>
+            <h2 class="text-lg font-semibold text-gray-900">{{ templateMeta[tpl.id]?.title || tpl.name }}</h2>
             <p v-if="tpl.description" class="text-sm text-gray-500">{{ tpl.description }}</p>
           </div>
         </div>

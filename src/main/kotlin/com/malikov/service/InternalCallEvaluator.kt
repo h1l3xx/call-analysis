@@ -98,8 +98,10 @@ class InternalCallEvaluator(
 
     fun generateSuggestions(templateId: String, description: String): List<String> {
         val typeLabel = when (templateId) {
-            "internal_eval" -> "внутренних звонков (между сотрудниками)"
-            "external_eval" -> "внешних звонков (менеджер — клиент)"
+            "internal_eval", "eval_internal", "eval_internal_incoming", "eval_internal_outgoing" ->
+                "внутренних звонков (между сотрудниками)"
+            "external_eval", "eval_external_incoming", "eval_external_outgoing" ->
+                "внешних звонков (менеджер — клиент)"
             else -> "звонков"
         }
 

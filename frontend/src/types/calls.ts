@@ -1,4 +1,5 @@
 export type CallStatus = 'queued' | 'processing' | 'transcribed_only' | 'pending_review' | 'analyzing' | 'done' | 'no_speech' | 'failed'
+export type CallDirection = 'internal_incoming' | 'internal_outgoing' | 'external_incoming' | 'external_outgoing' | 'unknown'
 
 export interface CreateCallRequest {
   managerId: string
@@ -21,7 +22,7 @@ export interface CallResponse {
   status: CallStatus
   source: string
   callType: string | null
-  callDirection: string | null
+  callDirection: CallDirection | null
   batchId: string | null
   durationSeconds: number | null
   createdAt: number
@@ -41,7 +42,7 @@ export interface CallDetailResponse {
   status: CallStatus
   source: string
   callType: string | null
-  callDirection: string | null
+  callDirection: CallDirection | null
   batchId: string | null
   audioS3Key: string | null
   audioFilename: string | null

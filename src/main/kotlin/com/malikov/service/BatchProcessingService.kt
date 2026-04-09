@@ -318,7 +318,7 @@ class BatchProcessingService(
 
     private fun resolveDirection(call: CallRow): String =
         call.callDirection ?: when (call.callType) {
-            "internal" -> "internal"
+            "internal" -> "internal_outgoing"
             "external" -> "external_incoming"
             else -> "unknown"
         }

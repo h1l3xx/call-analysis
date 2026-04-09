@@ -52,6 +52,36 @@ object PhoneParser {
     }
 
     /**
+     * Детектирует точное направление звонка для policy-routing:
+     * internal_incoming/internal_outgoing/external_incoming/external_outgoing/unknown.
+     */
+    fun detectCallDirection(filename: String): String {
+        val nameOnly = filename.substringBeforeLast('.')
+        val inOutMatch = IN_OUT_PATTERN.find(nameOnly)
+        if (inOutMatch != null) {
+            return when (inOutMatch.groupValues[1].lowercase(Locale.ROOT)) {
+                "incall" -> "external_incoming"
+                "outcall" -> "external_outgoing"
+                else -> "unknown"
+            }
+        }
+
+        val forKind = nameOnly.normalizedForKindDetection()
+        val isIncoming = forKind.contains("входящ")
+        val isOutgoing = forKind.contains("исходящ")
+        val pbxCount = PBX_EXT_IN_PARENS.findAll(nameOnly).count()
+
+        return when {
+            pbxCount >= 2 && isIncoming -> "internal_incoming"
+            pbxCount >= 2 && isOutgoing -> "internal_outgoing"
+            pbxCount >= 2 -> "unknown"
+            pbxCount == 1 && isIncoming -> "external_incoming"
+            pbxCount == 1 && isOutgoing -> "external_outgoing"
+            else -> "unknown"
+        }
+    }
+
+    /**
      * Упорядоченный список кандидатов для поиска менеджера (первый совпавший в БД выигрывает).
      */
     fun extractManagerIdentifiers(filename: String): List<String> {

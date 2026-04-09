@@ -85,6 +85,11 @@ class DepartmentCallPolicyRepository {
             ?.toRow(p)
     }
 
+    fun deleteDepartmentOverride(schema: String, departmentId: UUID, callDirection: String): Boolean = transaction {
+        val p = TDepartmentCallPolicies(schema)
+        p.deleteWhere { (p.departmentId eq departmentId) and (p.callDirection eq callDirection) } > 0
+    }
+
     private fun ResultRow.toRow(p: TDepartmentCallPolicies) = DepartmentCallPolicyRow(
         id = this[p.id],
         departmentId = this[p.departmentId],

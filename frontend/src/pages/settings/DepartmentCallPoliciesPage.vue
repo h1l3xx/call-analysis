@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { callsApi, scriptsApi, promptTemplatesApi, departmentCallPoliciesApi } from '@/api'
-import type { DepartmentCallPolicyResponse, PromptTemplateResponse, ScriptResponse } from '@/types'
-
-type Direction = 'internal' | 'external_incoming' | 'external_outgoing'
+import type { DepartmentPolicyCallDirection, DepartmentCallPolicyResponse, PromptTemplateResponse, ScriptResponse } from '@/types'
 
 const loading = ref(true)
 const savingKey = ref<string | null>(null)
@@ -11,46 +10,75 @@ const departments = ref<{ id: string; name: string }[]>([])
 const scripts = ref<ScriptResponse[]>([])
 const templates = ref<PromptTemplateResponse[]>([])
 const policies = ref<DepartmentCallPolicyResponse[]>([])
+const expandedDeptIds = ref<string[]>([])
 
-const directions: { value: Direction; label: string }[] = [
-  { value: 'internal', label: 'Внутренние' },
+const directions: { value: DepartmentPolicyCallDirection; label: string }[] = [
+  { value: 'internal_incoming', label: 'Внутренние входящие' },
+  { value: 'internal_outgoing', label: 'Внутренние исходящие' },
   { value: 'external_incoming', label: 'Внешние входящие' },
   { value: 'external_outgoing', label: 'Внешние исходящие' },
+  { value: 'unknown', label: 'Неопределённые' },
 ]
-
-const rows = computed(() => ([
-  { id: null as string | null, name: 'Глобально (fallback)' },
-  ...departments.value.map(d => ({ id: d.id, name: d.name })),
-]))
 
 const selectedScriptByKey = ref<Record<string, string>>({})
 const selectedTemplateByKey = ref<Record<string, string>>({})
 
 const templateOptions = computed(() =>
-  templates.value.filter(t => ['eval_internal', 'eval_external_incoming', 'eval_external_outgoing'].includes(t.id))
+  templates.value.filter(t => [
+    'eval_internal_incoming',
+    'eval_internal_outgoing',
+    'eval_external_incoming',
+    'eval_external_outgoing',
+  ].includes(t.id))
 )
 
-function key(departmentId: string | null, direction: Direction): string {
+function key(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
   return `${departmentId ?? 'global'}::${direction}`
 }
 
-function getExistingPolicy(departmentId: string | null, direction: Direction): DepartmentCallPolicyResponse | undefined {
+function getPolicy(departmentId: string | null, direction: DepartmentPolicyCallDirection): DepartmentCallPolicyResponse | undefined {
   return policies.value.find(p => p.departmentId === departmentId && p.callDirection === direction)
 }
 
-function defaultTemplate(direction: Direction): string {
-  if (direction === 'internal') return 'eval_internal'
+function defaultTemplate(direction: DepartmentPolicyCallDirection): string {
+  if (direction === 'internal_incoming') return 'eval_internal_incoming'
+  if (direction === 'internal_outgoing') return 'eval_internal_outgoing'
   if (direction === 'external_incoming') return 'eval_external_incoming'
-  return 'eval_external_outgoing'
+  if (direction === 'external_outgoing') return 'eval_external_outgoing'
+  return 'eval_external_incoming'
+}
+
+function effectiveScript(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
+  const exact = getPolicy(departmentId, direction)
+  if (exact?.scriptId) return exact.scriptId
+  const global = getPolicy(null, direction)
+  if (global?.scriptId) return global.scriptId
+  return scripts.value[0]?.id || ''
+}
+
+function effectiveTemplate(departmentId: string | null, direction: DepartmentPolicyCallDirection): string {
+  const exact = getPolicy(departmentId, direction)
+  if (exact?.promptTemplateId) return exact.promptTemplateId
+  const global = getPolicy(null, direction)
+  if (global?.promptTemplateId) return global.promptTemplateId
+  return defaultTemplate(direction)
+}
+
+function isInherited(departmentId: string, direction: DepartmentPolicyCallDirection): boolean {
+  return !getPolicy(departmentId, direction)
 }
 
 function initSelection() {
-  for (const row of rows.value) {
+  for (const d of directions) {
+    const k = key(null, d.value)
+    selectedScriptByKey.value[k] = effectiveScript(null, d.value)
+    selectedTemplateByKey.value[k] = effectiveTemplate(null, d.value)
+  }
+  for (const dep of departments.value) {
     for (const d of directions) {
-      const k = key(row.id, d.value)
-      const policy = getExistingPolicy(row.id, d.value)
-      selectedScriptByKey.value[k] = policy?.scriptId || scripts.value[0]?.id || ''
-      selectedTemplateByKey.value[k] = policy?.promptTemplateId || defaultTemplate(d.value)
+      const k = key(dep.id, d.value)
+      selectedScriptByKey.value[k] = effectiveScript(dep.id, d.value)
+      selectedTemplateByKey.value[k] = effectiveTemplate(dep.id, d.value)
     }
   }
 }
@@ -74,7 +102,7 @@ async function load() {
   }
 }
 
-async function saveRow(departmentId: string | null, direction: Direction) {
+async function saveRow(departmentId: string | null, direction: DepartmentPolicyCallDirection) {
   const k = key(departmentId, direction)
   const scriptId = selectedScriptByKey.value[k]
   const promptTemplateId = selectedTemplateByKey.value[k]
@@ -95,6 +123,39 @@ async function saveRow(departmentId: string | null, direction: Direction) {
   }
 }
 
+async function applyGlobalToDepartment(departmentId: string) {
+  for (const d of directions) {
+    selectedScriptByKey.value[key(departmentId, d.value)] = selectedScriptByKey.value[key(null, d.value)]
+    selectedTemplateByKey.value[key(departmentId, d.value)] = selectedTemplateByKey.value[key(null, d.value)]
+    await saveRow(departmentId, d.value)
+  }
+}
+
+async function resetToGlobal(departmentId: string) {
+  for (const d of directions) {
+    const k = key(departmentId, d.value)
+    savingKey.value = k
+    try {
+      await departmentCallPoliciesApi.removeDepartmentOverride(departmentId, d.value)
+    } catch {
+      // if no override exists - ignore
+    } finally {
+      savingKey.value = null
+    }
+  }
+  const { data } = await departmentCallPoliciesApi.list()
+  policies.value = data
+  initSelection()
+}
+
+function toggleDepartment(departmentId: string) {
+  if (expandedDeptIds.value.includes(departmentId)) {
+    expandedDeptIds.value = expandedDeptIds.value.filter(id => id !== departmentId)
+  } else {
+    expandedDeptIds.value = [...expandedDeptIds.value, departmentId]
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -110,41 +171,99 @@ onMounted(load)
     </div>
 
     <div v-else class="space-y-4">
-      <div
-        v-for="row in rows"
-        :key="row.id ?? 'global'"
-        class="bg-white border border-gray-200 rounded-xl p-4 space-y-3"
-      >
-        <h2 class="font-semibold text-gray-900">{{ row.name }}</h2>
-
+      <div class="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+        <h2 class="font-semibold text-gray-900">Глобальные настройки</h2>
         <div
           v-for="d in directions"
           :key="d.value"
-          class="grid grid-cols-1 lg:grid-cols-[220px_1fr_1fr_120px] gap-2 items-center"
+          class="grid grid-cols-1 lg:grid-cols-[240px_1fr_1fr_120px] gap-2 items-center"
         >
           <div class="text-sm text-gray-700">{{ d.label }}</div>
-
           <select
-            v-model="selectedScriptByKey[key(row.id, d.value)]"
+            v-model="selectedScriptByKey[key(null, d.value)]"
             class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
           >
             <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
           </select>
-
           <select
-            v-model="selectedTemplateByKey[key(row.id, d.value)]"
+            v-model="selectedTemplateByKey[key(null, d.value)]"
             class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
           >
             <option v-for="t in templateOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
           </select>
-
           <button
             class="px-3 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-50"
-            :disabled="savingKey === key(row.id, d.value)"
-            @click="saveRow(row.id, d.value)"
+            :disabled="savingKey === key(null, d.value)"
+            @click="saveRow(null, d.value)"
           >
-            {{ savingKey === key(row.id, d.value) ? 'Сохранение...' : 'Сохранить' }}
+            {{ savingKey === key(null, d.value) ? 'Сохранение...' : 'Сохранить' }}
           </button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div
+          v-for="dep in departments"
+          :key="dep.id"
+          class="bg-white border border-gray-200 rounded-xl"
+        >
+          <button
+            class="w-full flex items-center justify-between px-4 py-3 text-left"
+            @click="toggleDepartment(dep.id)"
+          >
+            <span class="font-medium text-gray-900">{{ dep.name }}</span>
+            <component :is="expandedDeptIds.includes(dep.id) ? ChevronDown : ChevronRight" class="w-4 h-4 text-gray-500" />
+          </button>
+
+          <div v-if="expandedDeptIds.includes(dep.id)" class="border-t border-gray-100 p-4 space-y-3">
+            <div class="flex items-center gap-2">
+              <button
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                @click="applyGlobalToDepartment(dep.id)"
+              >
+                Применить глобальные в отдел
+              </button>
+              <button
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                @click="resetToGlobal(dep.id)"
+              >
+                Сбросить к глобальным
+              </button>
+            </div>
+
+            <div
+              v-for="d in directions"
+              :key="d.value"
+              class="grid grid-cols-1 lg:grid-cols-[240px_1fr_1fr_150px_120px] gap-2 items-center"
+            >
+              <div class="text-sm text-gray-700">{{ d.label }}</div>
+              <select
+                v-model="selectedScriptByKey[key(dep.id, d.value)]"
+                class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+              >
+                <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
+              </select>
+              <select
+                v-model="selectedTemplateByKey[key(dep.id, d.value)]"
+                class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+              >
+                <option v-for="t in templateOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
+              </select>
+              <span
+                class="text-xs px-2 py-1 rounded w-fit"
+                :class="isInherited(dep.id, d.value) ? 'bg-gray-100 text-gray-600' : 'bg-primary-100 text-primary-700'"
+              >
+                {{ isInherited(dep.id, d.value) ? 'Наследуется' : 'Переопределено' }}
+              </span>
+              <button
+                class="px-3 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-50"
+                :disabled="savingKey === key(dep.id, d.value)"
+                @click="saveRow(dep.id, d.value)"
+              >
+                {{ savingKey === key(dep.id, d.value) ? 'Сохранение...' : 'Сохранить' }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

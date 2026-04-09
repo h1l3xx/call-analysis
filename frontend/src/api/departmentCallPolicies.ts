@@ -8,5 +8,8 @@ export const departmentCallPoliciesApi = {
   upsert(payload: UpsertDepartmentCallPolicyRequest) {
     return client.post<DepartmentCallPolicyResponse>('/api/v1/department-call-policies', payload)
   },
+  removeDepartmentOverride(departmentId: string, direction: string) {
+    return client.delete(`/api/v1/department-call-policies/departments/${departmentId}/${direction}`)
+  },
 }
 

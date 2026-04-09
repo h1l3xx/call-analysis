@@ -13,7 +13,13 @@ class DepartmentCallPolicyService(
     private val scriptRepo: ScriptRepository,
     private val promptRepo: PromptTemplateRepository,
 ) {
-    private val allowedDirections = setOf("internal", "external_incoming", "external_outgoing", "unknown")
+    private val allowedDirections = setOf(
+        "internal_incoming",
+        "internal_outgoing",
+        "external_incoming",
+        "external_outgoing",
+        "unknown",
+    )
 
     fun list(schema: String): List<DepartmentCallPolicyResponse> =
         repo.list(schema).map {
@@ -54,6 +60,13 @@ class DepartmentCallPolicyService(
             createdAt = row.createdAt,
             updatedAt = row.updatedAt,
         )
+    }
+
+    fun deleteDepartmentOverride(schema: String, departmentId: String, callDirection: String): Boolean {
+        require(callDirection in allowedDirections) {
+            "Unsupported callDirection '$callDirection'"
+        }
+        return repo.deleteDepartmentOverride(schema, UUID.fromString(departmentId), callDirection)
     }
 }
 

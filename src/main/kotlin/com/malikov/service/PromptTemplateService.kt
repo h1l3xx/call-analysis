@@ -25,19 +25,30 @@ class PromptTemplateService(
             "internal_eval",
             "external_eval",
             "eval_internal",
+            "eval_internal_incoming",
+            "eval_internal_outgoing",
+            "eval_external_incoming",
+            "eval_external_outgoing",
+        )
+        private val BUSINESS_IDS = listOf(
+            "eval_internal_incoming",
+            "eval_internal_outgoing",
             "eval_external_incoming",
             "eval_external_outgoing",
         )
 
         fun defaultContent(id: String): String = when (id) {
-            "internal_eval", "eval_internal" -> DEFAULT_INTERNAL_INSTRUCTIONS
+            "internal_eval", "eval_internal", "eval_internal_incoming", "eval_internal_outgoing" -> DEFAULT_INTERNAL_INSTRUCTIONS
             "external_eval", "eval_external_incoming", "eval_external_outgoing" -> DEFAULT_EXTERNAL_INSTRUCTIONS
             else -> ""
         }
     }
 
-    fun list(schema: String): List<PromptTemplateResponse> =
-        repo.findAll(schema).filter { it.id in KNOWN_IDS }
+    fun list(schema: String): List<PromptTemplateResponse> {
+        val all = repo.findAll(schema).filter { it.id in KNOWN_IDS }
+        val byId = all.associateBy { it.id }
+        return BUSINESS_IDS.mapNotNull { byId[it] }
+    }
 
     fun getById(schema: String, id: String): PromptTemplateResponse =
         repo.findById(schema, id) ?: throw NotFoundException("Prompt template '$id' not found")

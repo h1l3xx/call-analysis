@@ -8,6 +8,7 @@ import io.ktor.server.application.call
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -24,6 +25,18 @@ fun Route.departmentCallPolicyRoutes(service: DepartmentCallPolicyService) {
             val req = call.receive<UpsertDepartmentCallPolicyRequest>()
             val item = service.upsert(p.schema!!, req)
             call.respond(HttpStatusCode.OK, item)
+        }
+
+        delete("/departments/{departmentId}/{direction}") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val departmentId = call.parameters["departmentId"]
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "departmentId is required"))
+            val direction = call.parameters["direction"]
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "direction is required"))
+
+            val deleted = service.deleteDepartmentOverride(p.schema!!, departmentId, direction)
+            if (deleted) call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "Override not found"))
         }
     }
 }

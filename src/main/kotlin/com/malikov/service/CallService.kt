@@ -140,10 +140,11 @@ class CallService(
 
         val parsed = files.map { (audioFile, filename) ->
             val ct = PhoneParser.detectCallType(filename)
-            val (ctStr, dir) = when (ct) {
-                CallType.INTERNAL -> { intCount++; "internal" to "internal" }
-                CallType.EXTERNAL_INCOMING -> { extInCount++; "external" to "external_incoming" }
-                CallType.EXTERNAL_OUTGOING -> { extOutCount++; "external" to "external_outgoing" }
+            val detectedDirection = PhoneParser.detectCallDirection(filename)
+            val (ctStr, direction) = when (ct) {
+                CallType.INTERNAL -> { intCount++; "internal" to detectedDirection }
+                CallType.EXTERNAL_INCOMING -> { extInCount++; "external" to detectedDirection }
+                CallType.EXTERNAL_OUTGOING -> { extOutCount++; "external" to detectedDirection }
                 CallType.UNKNOWN -> { unkCount++; "unknown" to "unknown" }
             }
             val candidates = PhoneParser.extractManagerIdentifiers(filename)
@@ -157,7 +158,7 @@ class CallService(
 
             val dedupKey = PhoneParser.extractInternalCallKey(filename)
 
-            ParsedFile(audioFile, filename, ct, ctStr, dir, match?.first, match?.second, secondMgr, dedupKey)
+            ParsedFile(audioFile, filename, ct, ctStr, direction, match?.first, match?.second, secondMgr, dedupKey)
         }
 
         val seenInternalKeys = mutableSetOf<String>()
