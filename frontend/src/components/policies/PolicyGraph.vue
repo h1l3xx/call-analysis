@@ -92,7 +92,13 @@ function shortName(name: string): string {
   return name.slice(0, 14) + '…'
 }
 
-const NODE_RADIUS = 16
+const NODE_RADIUS = 20
+
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
 
 const configs = computed(() => ({
   view: {
@@ -135,7 +141,12 @@ const configs = computed(() => ({
       visible: false,
     },
     label: {
-      visible: false,
+      visible: true,
+      fontSize: 11,
+      fontFamily: 'Inter, system-ui, sans-serif',
+      color: '#374151',
+      direction: 'south' as const,
+      margin: 4,
     },
   },
   edge: {
@@ -208,16 +219,26 @@ const totalPairs = computed(() => Object.keys(edges.value).length)
           filter="url(#nodeShadow)"
           class="cursor-pointer"
         />
-      </template>
-
-      <template #override-node-label="{ nodeId, scale, x, y, textAnchor }">
         <text
-          :x="x"
-          :y="y + 4 * scale"
+          y="1"
           :font-size="11 * scale"
           font-family="Inter, system-ui, sans-serif"
+          font-weight="600"
+          text-anchor="middle"
+          dominant-baseline="central"
+          :fill="hasDepartmentOverride(nodeId) ? '#ffffff' : '#64748b'"
+          class="select-none pointer-events-none"
+        >{{ initials(departments.find(d => d.id === nodeId)?.name ?? '') }}</text>
+      </template>
+
+      <template #override-node-label="{ nodeId, scale, x, y, config, textAnchor }">
+        <text
+          :x="x"
+          :y="y + 2 * scale"
+          :font-size="config.fontSize * scale"
+          :font-family="config.fontFamily"
           :text-anchor="textAnchor"
-          fill="#374151"
+          :fill="config.color"
           dominant-baseline="hanging"
           class="select-none pointer-events-none"
         >{{ shortName(departments.find(d => d.id === nodeId)?.name ?? '') }}</text>
