@@ -1,8 +1,11 @@
 package com.malikov.service
 
 import com.malikov.config.NotFoundException
+import com.malikov.db.ManagerPhoneRow
 import com.malikov.db.ManagerRepository
 import com.malikov.db.ManagerRow
+import com.malikov.dto.AddPhoneRequest
+import com.malikov.dto.ManagerPhoneResponse
 import com.malikov.dto.ManagerResponse
 import com.malikov.dto.PaginationParams
 import com.malikov.dto.PaginatedResponse
@@ -23,6 +26,26 @@ class ManagerService(private val repo: ManagerRepository) {
     fun getByUserId(schema: String, userId: UUID): ManagerResponse? =
         repo.findByUserId(schema, userId)?.toResponse()
 
+    // ── Phone management ────────────────────────────────────────────────────
+
+    fun addPhone(schema: String, managerId: UUID, req: AddPhoneRequest): ManagerPhoneResponse {
+        // Verify manager exists
+        repo.findById(schema, managerId) ?: throw NotFoundException("Manager not found")
+        return repo.addPhone(schema, managerId, req.phoneNumber, req.label, req.isPrimary).toResponse()
+    }
+
+    fun removePhone(schema: String, managerId: UUID, phoneId: UUID) {
+        repo.findById(schema, managerId) ?: throw NotFoundException("Manager not found")
+        if (!repo.removePhone(schema, phoneId)) throw NotFoundException("Phone not found")
+    }
+
+    fun listPhones(schema: String, managerId: UUID): List<ManagerPhoneResponse> {
+        repo.findById(schema, managerId) ?: throw NotFoundException("Manager not found")
+        return repo.listPhones(schema, managerId).map { it.toResponse() }
+    }
+
+    // ── Mappers ─────────────────────────────────────────────────────────────
+
     private fun ManagerRow.toResponse() = ManagerResponse(
         id             = id.toString(),
         userId         = userId.toString(),
@@ -32,7 +55,15 @@ class ManagerService(private val repo: ManagerRepository) {
         departmentName = departmentName,
         extension      = extension,
         phoneNumber    = phoneNumber,
+        phoneNumbers   = phoneNumbers.map { it.toResponse() },
         isActive       = isActive,
         createdAt      = createdAt,
+    )
+
+    private fun ManagerPhoneRow.toResponse() = ManagerPhoneResponse(
+        id          = id.toString(),
+        phoneNumber = phoneNumber,
+        label       = label,
+        isPrimary   = isPrimary,
     )
 }

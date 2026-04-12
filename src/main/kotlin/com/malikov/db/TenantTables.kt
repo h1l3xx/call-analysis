@@ -208,6 +208,17 @@ class TPromptTemplates(schema: String) : Table("$schema.prompt_templates") {
     override val primaryKey = PrimaryKey(id)
 }
 
+class TManagerPhoneNumbers(schema: String) : Table("$schema.manager_phone_numbers") {
+    val id          = uuid("id").autoGenerate()
+    val managerId   = uuid("manager_id")
+    val phoneNumber = text("phone_number")
+    val label       = text("label").nullable()
+    val isPrimary   = bool("is_primary").default(false)
+    val createdAt   = long("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
 class TDepartmentCallPolicies(schema: String) : Table("$schema.department_call_policies") {
     val id               = uuid("id").autoGenerate()
     val departmentId     = uuid("department_id").nullable()
