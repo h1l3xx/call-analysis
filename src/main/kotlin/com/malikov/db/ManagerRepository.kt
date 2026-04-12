@@ -142,7 +142,7 @@ class ManagerRepository {
             .where {
                 (m.phoneNumber eq normalized) or (m.extension eq normalized) or
                 (m.phoneNumber eq phone) or (m.extension eq phone) or
-                (managerIdFromExtra?.let { mid -> m.id eq mid } ?: Op.FALSE)
+                (if (managerIdFromExtra != null) (m.id eq managerIdFromExtra) else Op.FALSE)
             }
             .firstOrNull()
             ?.toManagerRow(m, d) ?: return@transaction null
@@ -186,7 +186,7 @@ class ManagerRepository {
                     .where {
                         (m.phoneNumber eq normalized) or (m.extension eq normalized) or
                         (m.phoneNumber eq c) or (m.extension eq c) or
-                        (extraManagerId?.let { mid -> m.id eq mid } ?: Op.FALSE)
+                        (if (extraManagerId != null) (m.id eq extraManagerId) else Op.FALSE)
                     }
                     .firstOrNull()
                     ?.toManagerRow(m, d)
