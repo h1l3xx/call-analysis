@@ -3,6 +3,16 @@ package com.malikov.dto
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class CallStatsResponse(
+    val total: Long,
+    val processing: Long,
+    val done: Long,
+    val failed: Long,
+    val noSpeech: Long,
+    val avgScore: Double,
+)
+
+@Serializable
 data class CreateCallRequest(
     val managerId: String,
     val scriptId: String,
