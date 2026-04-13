@@ -173,9 +173,24 @@ function startPolling() {
   }, 5000)
 }
 
+const SCROLL_KEY = computed(() => `batch-scroll-${batchId.value}`)
+
+function saveScroll() {
+  sessionStorage.setItem(SCROLL_KEY.value, String(window.scrollY))
+}
+
+function restoreScroll() {
+  const saved = sessionStorage.getItem(SCROLL_KEY.value)
+  if (saved) {
+    sessionStorage.removeItem(SCROLL_KEY.value)
+    requestAnimationFrame(() => window.scrollTo({ top: Number(saved), behavior: 'instant' }))
+  }
+}
+
 onMounted(async () => {
   await fetchBatch()
   await Promise.all([fetchCalls(), fetchDepartments()])
+  restoreScroll()
   startPolling()
 })
 
@@ -527,7 +542,7 @@ function openCallsModal(title: string, callIds: string[]) {
                 custom
                 v-slot="{ navigate }"
               >
-                <tr class="hover:bg-gray-50 cursor-pointer transition-colors" @click="navigate">
+                <tr class="hover:bg-gray-50 cursor-pointer transition-colors" @click="saveScroll(); navigate()">
                   <td class="px-5 py-3 font-medium text-gray-900">
                     {{ participantLabel(call.managerName, call.participantNames) }}
                     <template v-if="call.secondManagerId || call.secondManagerName">
