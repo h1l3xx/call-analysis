@@ -278,6 +278,9 @@ function openCallsModal(title: string, callIds: string[]) {
             <Phone class="w-4 h-4 text-purple-500" />
             <span class="text-gray-700">Внешние: {{ batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing }}</span>
           </div>
+          <div v-if="batch.callTypeStats.unknown" class="flex items-center gap-1.5">
+            <span class="text-gray-400">Неизвестные: {{ batch.callTypeStats.unknown }}</span>
+          </div>
         </div>
       </div>
 

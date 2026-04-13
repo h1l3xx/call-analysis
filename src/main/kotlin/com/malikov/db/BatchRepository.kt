@@ -103,11 +103,16 @@ class BatchRepository {
         val rows = cl.select(cl.callType, cl.callType.count())
             .where { (cl.batchId eq batchId) and (cl.status inList finishedStatuses) }
             .groupBy(cl.callType)
-            .associate { it[cl.callType] to it[cl.callType.count()].toInt() }
+            .associate { (it[cl.callType] ?: "unknown") to it[cl.callType.count()].toInt() }
+        val knownSum = (rows["internal"] ?: 0) +
+            (rows["external_incoming"] ?: 0) + (rows["external"] ?: 0) +
+            (rows["external_outgoing"] ?: 0)
+        val totalFinished = rows.values.sum()
         val stats = CallTypeStatsJson(
             internal         = rows["internal"] ?: 0,
             externalIncoming = rows["external_incoming"] ?: (rows["external"] ?: 0),
             externalOutgoing = rows["external_outgoing"] ?: 0,
+            unknown          = totalFinished - knownSum,
         )
         val b = TBatches(schema)
         b.update({ b.id eq batchId }) { it[b.callTypeStats] = json.encodeToString(stats) }
