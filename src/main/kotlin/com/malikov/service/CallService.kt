@@ -195,13 +195,10 @@ class CallService(
         val actualTotal = deduped.size
         val typeStats = CallTypeStatsJson(intCount, extInCount, extOutCount, unkCount)
 
-        // Use existing batch or create a new one
-        val batchId = if (existingBatchId != null) {
-            batchRepo.addToTotalCalls(schema, existingBatchId, actualTotal)
-            existingBatchId
-        } else {
-            batchRepo.create(schema, actualTotal, typeStats)
-        }
+        // Use existing batch or create a new one.
+        // For subsequent chunks we pass 0 now and add createdCalls AFTER the loop
+        // so that failed (manager-not-found) files don't inflate totalCalls.
+        val batchId = existingBatchId ?: batchRepo.create(schema, actualTotal, typeStats)
         // typeStats of subsequent chunks are not tracked at creation — refresh after inserts below
 
         val results = mutableListOf<BulkUploadItemResult>()
@@ -291,9 +288,14 @@ class CallService(
             }
         }
 
-        // totalCalls = звонки которые реально созданы (очередь + pre-no_speech; без failed manager-not-found)
+        // totalCalls = только реально созданные звонки (очередь + pre-no_speech).
+        // Файлы с ненайденным менеджером не попали в DB — не считаем их.
         val createdCalls = queued + preNoSpeech
-        if (existingBatchId == null && createdCalls != actualTotal) {
+        if (existingBatchId != null) {
+            // Чанк: добавляем только фактически созданные (не весь actualTotal)
+            batchRepo.addToTotalCalls(schema, batchId, createdCalls)
+        } else if (createdCalls != actualTotal) {
+            // Первый/единственный чанк: корректируем если были пропуски
             batchRepo.updateTotalCalls(schema, batchId, createdCalls)
         }
 
