@@ -266,7 +266,14 @@ class AudioPreprocessor:
         if not input_path_obj.exists():
             raise FileNotFoundError(f"Аудиофайл не найден: {input_path}")
 
-        logger.info(f"Предобработка аудио: {input_path_obj.name}")
+        file_size = input_path_obj.stat().st_size
+        if file_size < 1024:
+            raise ValueError(
+                f"CORRUPTED_AUDIO: Файл слишком маленький ({file_size} байт) — "
+                f"вероятно повреждён или пустой: {input_path_obj.name}"
+            )
+
+        logger.info(f"Предобработка аудио: {input_path_obj.name} ({file_size} байт)")
 
         try:
             # ⭐ НОВОЕ: Автоматическое определение и декодирование формата

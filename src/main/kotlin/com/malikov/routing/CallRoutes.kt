@@ -22,6 +22,7 @@ private val log = LoggerFactory.getLogger("CallRoutes")
 
 private val ALLOWED_AUDIO_EXTENSIONS = setOf("wav", "mp3", "ogg", "flac", "m4a", "webm", "opus")
 private const val MAX_AUDIO_SIZE_BYTES = 100L * 1024 * 1024  // 100 MB
+private const val MIN_AUDIO_SIZE_BYTES = 1024L                // 1 KB — меньше не может быть валидным аудио
 private const val MAX_BULK_FILES = 2000
 
 fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, batchExportService: BatchExportService) {
@@ -74,9 +75,14 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
                                 }
 
                                 // Проверяем размер
-                                require(tempFile.length() <= MAX_AUDIO_SIZE_BYTES) {
+                                val fileSize = tempFile.length()
+                                require(fileSize >= MIN_AUDIO_SIZE_BYTES) {
                                     tempFile.delete()
-                                    "Audio file too large: ${tempFile.length() / 1024 / 1024}MB. Max: ${MAX_AUDIO_SIZE_BYTES / 1024 / 1024}MB"
+                                    "Audio file is too small (${fileSize} bytes) — likely corrupted or empty"
+                                }
+                                require(fileSize <= MAX_AUDIO_SIZE_BYTES) {
+                                    tempFile.delete()
+                                    "Audio file too large: ${fileSize / 1024 / 1024}MB. Max: ${MAX_AUDIO_SIZE_BYTES / 1024 / 1024}MB"
                                 }
 
                                 audioFile = tempFile
@@ -144,10 +150,12 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
                                             input.copyTo(output)
                                         }
                                     }
-                                    if (tempFile.length() <= MAX_AUDIO_SIZE_BYTES) {
-                                        audioFiles.add(tempFile to origName)
-                                    } else {
+                                    val size = tempFile.length()
+                                    if (size < MIN_AUDIO_SIZE_BYTES || size > MAX_AUDIO_SIZE_BYTES) {
+                                        log.warn("Skipping file {} — size {} bytes is outside valid range", origName, size)
                                         tempFile.delete()
+                                    } else {
+                                        audioFiles.add(tempFile to origName)
                                     }
                                 }
                             }
