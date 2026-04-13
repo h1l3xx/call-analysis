@@ -71,6 +71,11 @@ class BatchRepository {
             if (status == "done" || status == "failed") {
                 it[b.finishedAt] = System.currentTimeMillis()
             }
+            // При завершении выравниваем processedCalls = totalCalls —
+            // страхуемся от счётчиков, потерянных при двойных сбоях.
+            if (status == "done") {
+                with(SqlExpressionBuilder) { it[b.processedCalls] = b.totalCalls }
+            }
         }
     }
 
