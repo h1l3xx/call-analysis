@@ -92,7 +92,9 @@ class BatchRepository {
      */
     fun refreshTypeStats(schema: String, batchId: UUID) = transaction {
         val cl = TCalls(schema)
-        val finishedStatuses = listOf("done", "transcribed_only", "no_speech", "failed")
+        // Считаем только done — ровно те звонки, которые попадают в LLM summary.
+        // no_speech/failed/transcribed_only не входят в аналитику, их не показываем в типах.
+        val finishedStatuses = listOf("done")
         val rows = cl.select(cl.callType, cl.callType.count())
             .where { (cl.batchId eq batchId) and (cl.status inList finishedStatuses) }
             .groupBy(cl.callType)
