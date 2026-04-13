@@ -9,6 +9,8 @@ data class BatchResponse(
     val totalCalls: Int,
     val processedCalls: Int,
     val callTypeStats: CallTypeStatsResponse?,
+    val noSpeechCount: Int = 0,
+    val failedCount: Int = 0,
     val createdAt: Long,
     val finishedAt: Long?,
 )

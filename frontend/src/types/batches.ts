@@ -13,6 +13,8 @@ export interface BatchResponse {
   totalCalls: number
   processedCalls: number
   callTypeStats: CallTypeStats | null
+  noSpeechCount: number
+  failedCount: number
   createdAt: number
   finishedAt: number | null
 }

@@ -201,6 +201,8 @@ private fun com.malikov.db.BatchRow.toBatchResponse(): BatchResponse {
         totalCalls = totalCalls,
         processedCalls = processedCalls,
         callTypeStats = statsJson,
+        noSpeechCount = noSpeechCount,
+        failedCount = failedCount,
         createdAt = createdAt,
         finishedAt = finishedAt,
     )

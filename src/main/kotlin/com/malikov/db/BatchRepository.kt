@@ -22,6 +22,8 @@ data class BatchRow(
     val totalCalls: Int,
     val processedCalls: Int,
     val callTypeStats: String?,
+    val noSpeechCount: Int = 0,
+    val failedCount: Int = 0,
     val createdAt: Long,
     val finishedAt: Long?,
 )
@@ -49,9 +51,19 @@ class BatchRepository {
         }[b.id]
     }
 
+    private fun countCallsByStatus(schema: String, batchId: UUID): Map<String, Int> = transaction {
+        val cl = TCalls(schema)
+        cl.select(cl.status, cl.status.count())
+            .where { cl.batchId eq batchId }
+            .groupBy(cl.status)
+            .associate { it[cl.status] to it[cl.status.count()].toInt() }
+    }
+
     fun findById(schema: String, batchId: UUID): BatchRow? = transaction {
         val b = TBatches(schema)
-        b.selectAll().where { b.id eq batchId }.singleOrNull()?.toBatchRow(b)
+        val row = b.selectAll().where { b.id eq batchId }.singleOrNull() ?: return@transaction null
+        val statusCounts = countCallsByStatus(schema, batchId)
+        row.toBatchRow(b, statusCounts)
     }
 
     fun list(schema: String, off: Long, limit: Int): Pair<List<BatchRow>, Long> = transaction {
@@ -60,7 +72,7 @@ class BatchRepository {
         val items = b.selectAll()
             .orderBy(b.createdAt, SortOrder.DESC)
             .limit(limit, off)
-            .map { it.toBatchRow(b) }
+            .map { it.toBatchRow(b, emptyMap()) }
         items to total
     }
 
@@ -224,12 +236,14 @@ class BatchRepository {
             }
     }
 
-    private fun ResultRow.toBatchRow(b: TBatches) = BatchRow(
+    private fun ResultRow.toBatchRow(b: TBatches, statusCounts: Map<String, Int>) = BatchRow(
         id = this[b.id],
         status = this[b.status],
         totalCalls = this[b.totalCalls],
         processedCalls = this[b.processedCalls],
         callTypeStats = this[b.callTypeStats],
+        noSpeechCount = statusCounts["no_speech"] ?: 0,
+        failedCount = statusCounts["failed"] ?: 0,
         createdAt = this[b.createdAt],
         finishedAt = this[b.finishedAt],
     )

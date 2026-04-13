@@ -278,7 +278,7 @@ function openCallsModal(title: string, callIds: string[]) {
           <p class="text-xs text-gray-500 text-center">{{ progressPercent() }}%</p>
         </div>
 
-        <div class="flex gap-4 text-sm">
+        <div class="flex flex-wrap gap-4 text-sm">
           <div v-if="summaryTypeCounts.internal ?? batch.callTypeStats?.internal" class="flex items-center gap-1.5">
             <Building class="w-4 h-4 text-blue-500" />
             <span class="text-gray-700">Внутренние: {{ summaryTypeCounts.internal ?? batch.callTypeStats?.internal }}</span>
@@ -286,6 +286,12 @@ function openCallsModal(title: string, callIds: string[]) {
           <div v-if="summaryTypeCounts.external ?? (batch.callTypeStats && batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing)" class="flex items-center gap-1.5">
             <Phone class="w-4 h-4 text-purple-500" />
             <span class="text-gray-700">Внешние: {{ summaryTypeCounts.external ?? (batch.callTypeStats!.externalIncoming + batch.callTypeStats!.externalOutgoing) }}</span>
+          </div>
+          <div v-if="batch.noSpeechCount" class="flex items-center gap-1.5">
+            <span class="text-gray-400 text-xs">Без речи: {{ batch.noSpeechCount }}</span>
+          </div>
+          <div v-if="batch.failedCount" class="flex items-center gap-1.5">
+            <span class="text-red-400 text-xs">Ошибки: {{ batch.failedCount }}</span>
           </div>
         </div>
       </div>
