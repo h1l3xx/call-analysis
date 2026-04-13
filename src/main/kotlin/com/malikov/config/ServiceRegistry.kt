@@ -75,7 +75,7 @@ class ServiceRegistry(config: AppConfig) {
 
     // Manager period evaluations
     val managerEvaluationService = ManagerEvaluationService(
-        callRepository, managerRepository, internalCallEvaluator,
+        callRepository, managerRepository, internalCallEvaluator, promptTemplateService,
     )
 
     // Business services

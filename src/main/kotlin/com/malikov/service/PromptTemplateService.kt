@@ -23,6 +23,17 @@ class PromptTemplateService(
 
         val DEFAULT_EXTERNAL_INSTRUCTIONS = "Оцени каждый критерий. Также напиши краткое описание звонка (2–3 предложения): кто обратился, с какой целью, чем закончился разговор."
 
+        val DEFAULT_MANAGER_EVAL_INSTRUCTIONS = """
+Проанализируй работу сотрудника за период по следующим аспектам:
+
+1. Общий уровень коммуникации: чёткость речи, профессиональный тон, культура общения.
+2. Результативность: насколько звонки заканчиваются конкретными договорённостями, решениями или следующими шагами.
+3. Соблюдение стандартов: следование скриптам, регламентам, фиксация информации.
+4. Систематические проблемы: повторяющиеся ошибки или недостатки, требующие внимания.
+5. Точки роста: конкретные навыки или поведение, которые стоит улучшить.
+
+Определи уровень работы сотрудника: high (выше ожиданий), medium (соответствует ожиданиям), low (требует улучшений).""".trimIndent()
+
         private val KNOWN_IDS = setOf(
             "internal_eval",
             "external_eval",
@@ -31,6 +42,7 @@ class PromptTemplateService(
             "eval_internal_outgoing",
             "eval_external_incoming",
             "eval_external_outgoing",
+            "manager_period_eval",
         )
         private val HIDDEN_TECHNICAL_IDS = setOf(
             "internal_eval",
@@ -47,6 +59,7 @@ class PromptTemplateService(
         fun defaultContent(id: String): String = when (id) {
             "internal_eval", "eval_internal", "eval_internal_incoming", "eval_internal_outgoing" -> DEFAULT_INTERNAL_INSTRUCTIONS
             "external_eval", "eval_external_incoming", "eval_external_outgoing" -> DEFAULT_EXTERNAL_INSTRUCTIONS
+            "manager_period_eval" -> DEFAULT_MANAGER_EVAL_INSTRUCTIONS
             else -> ""
         }
     }
@@ -55,10 +68,11 @@ class PromptTemplateService(
         val all = repo.findAll(schema).filter { isEvaluationTemplate(it) && it.id !in HIDDEN_TECHNICAL_IDS }
         val byId = all.associateBy { it.id }
         val orderedCore = CORE_DIRECTION_IDS.mapNotNull { byId[it] }
+        val managerEval = byId["manager_period_eval"]?.let { listOf(it) } ?: emptyList()
         val rest = all
-            .filterNot { it.id in CORE_DIRECTION_IDS }
+            .filterNot { it.id in CORE_DIRECTION_IDS || it.id == "manager_period_eval" }
             .sortedBy { it.name.lowercase() }
-        return orderedCore + rest
+        return orderedCore + managerEval + rest
     }
 
     fun getById(schema: String, id: String): PromptTemplateResponse {

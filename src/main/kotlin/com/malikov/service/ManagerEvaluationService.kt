@@ -27,7 +27,15 @@ class ManagerEvaluationService(
     private val callRepo: CallRepository,
     private val managerRepo: ManagerRepository,
     private val llmEvaluator: InternalCallEvaluator,
+    private val promptTemplateService: PromptTemplateService? = null,
 ) {
+    companion object {
+        const val TEMPLATE_ID = "manager_period_eval"
+        // Max transcription chars per call — kept short for low-score calls to fit token budget
+        private const val TRANSCRIPT_SNIPPET_CHARS = 400
+        // Only include transcription for calls below this score threshold
+        private const val LOW_SCORE_THRESHOLD = 65.0
+    }
     private val log = LoggerFactory.getLogger(ManagerEvaluationService::class.java)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -50,6 +58,8 @@ class ManagerEvaluationService(
             untilMs = until,
         ).mapNotNull { row ->
             val qs = row.qualityScore ?: return@mapNotNull null
+            val transcript = row.transcription?.cleanedText
+                ?: row.transcription?.rawText
             CallScoreEntry(
                 callId       = row.call.id.toString().take(8),
                 score        = qs.overallScore,
@@ -57,6 +67,7 @@ class ManagerEvaluationService(
                 weaknesses   = parseJsonArray(qs.weaknesses),
                 strengths    = parseJsonArray(qs.strengths),
                 summary      = qs.summary,
+                transcript   = transcript,
             )
         }
 
@@ -73,7 +84,7 @@ class ManagerEvaluationService(
         val assessmentJson = if (callCount == 0) {
             buildEmptyAssessment()
         } else {
-            buildLlmAssessment(manager.fullName, callCount, avgScore, scores)
+            buildLlmAssessment(schema, manager.fullName, callCount, avgScore, scores)
         }
 
         val id = saveEvaluation(schema, managerId, since, until, callCount, avgScore, assessmentJson)
@@ -115,6 +126,7 @@ class ManagerEvaluationService(
     // ── Private ───────────────────────────────────────────────────────────────
 
     private fun buildLlmAssessment(
+        schema: String,
         managerName: String,
         callCount: Int,
         avgScore: Double?,
@@ -124,19 +136,37 @@ class ManagerEvaluationService(
 
         val callLines = scores.joinToString("\n") { e ->
             val type = if (e.callType == "internal") "внутр" else "внеш"
-            val ws = e.weaknesses.joinToString("; ").take(120)
             val sc = e.score?.let { "%.0f".format(it) } ?: "?"
-            "[${e.callId}] $type score=$sc | ${ws.ifBlank { e.summary?.take(80) ?: "—" }}"
+            val ws = e.weaknesses.joinToString("; ").take(150)
+            val base = "[${e.callId}] $type score=$sc | ${ws.ifBlank { e.summary?.take(100) ?: "—" }}"
+
+            // Append transcription snippet for low-score calls so LLM sees the actual conversation
+            val showTranscript = (e.score == null || e.score < LOW_SCORE_THRESHOLD) && !e.transcript.isNullOrBlank()
+            if (showTranscript) {
+                val snippet = e.transcript!!.take(TRANSCRIPT_SNIPPET_CHARS).replace("\n", " ")
+                "$base\n  Фрагмент: «$snippet»"
+            } else {
+                base
+            }
+        }
+
+        val customInstructions = try {
+            promptTemplateService?.getContent(schema, TEMPLATE_ID)
+                ?.takeIf { it.isNotBlank() }
+                ?: PromptTemplateService.DEFAULT_MANAGER_EVAL_INSTRUCTIONS
+        } catch (e: Exception) {
+            log.warn("Could not load prompt template '{}' for schema {}: {}", TEMPLATE_ID, schema, e.message)
+            PromptTemplateService.DEFAULT_MANAGER_EVAL_INSTRUCTIONS
         }
 
         val prompt = """
 Оцени работу сотрудника «$managerName» на основе анализа $callCount звонков.
 Средний балл: $scoreStr из 100.
 
-Список звонков (ID, тип, балл, недостатки):
+Список звонков (формат: [ID] тип score=балл | недостатки; для проблемных — фрагмент транскрипции):
 $callLines
 
-Проанализируй паттерны и сильные/слабые стороны сотрудника. Дай конкретные рекомендации по развитию.
+$customInstructions
 
 Ответ СТРОГО в JSON:
 {
@@ -220,6 +250,7 @@ $callLines
         val weaknesses: List<String>,
         val strengths: List<String>,
         val summary: String?,
+        val transcript: String?,
     )
 
     @Serializable
