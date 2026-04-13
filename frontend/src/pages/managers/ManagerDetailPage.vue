@@ -67,6 +67,37 @@ const periodMs = computed<{ since?: number; until?: number }>(() => {
 
 function selectPreset(p: Preset) { preset.value = p; showCustom.value = false }
 
+const periodLabel = computed(() => {
+  if (showCustom.value) {
+    const from = customFrom.value ? new Date(customFrom.value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '?'
+    const to   = customTo.value   ? new Date(customTo.value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '?'
+    return `${from} — ${to}`
+  }
+  switch (preset.value) {
+    case 'today': return 'сегодня'
+    case '7d':    return 'последние 7 дней'
+    case '30d':   return 'последние 30 дней'
+    default:      return 'всё время'
+  }
+})
+
+// True if latestEvaluation covers roughly the same window as the current period
+const evaluationMatchesPeriod = computed(() => {
+  if (!latestEvaluation.value) return false
+  const ev = latestEvaluation.value
+  const TOLERANCE = 2 * 86400_000 // 2 days
+  const pSince = periodMs.value.since
+  const pUntil = periodMs.value.until
+  const evFrom = ev.periodFrom
+  const evTo   = ev.periodTo
+
+  const fromOk = pSince == null && evFrom == null
+    || (pSince != null && evFrom != null && Math.abs(pSince - evFrom) < TOLERANCE)
+  const toOk   = pUntil == null && evTo == null
+    || (pUntil != null && evTo != null && Math.abs(pUntil - evTo) < TOLERANCE)
+  return fromOk && toOk
+})
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
 const stats = ref({ total: 0, processing: 0, done: 0, failed: 0, noSpeech: 0, avgScore: 0 })
 const statsLoading = ref(true)
@@ -251,60 +282,93 @@ function formatPhone(p: string) {
           :disabled="exporting"
           class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
           @click="exportCalls"
+          :title="`Выгрузить CSV за: ${periodLabel}`"
         >
           <Loader2 v-if="exporting" class="w-4 h-4 animate-spin" />
           <Download v-else class="w-4 h-4" />
-          Выгрузить CSV
+          CSV
         </button>
         <button
           :disabled="evaluating"
-          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 disabled:opacity-50 transition-colors"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:opacity-50"
+          :class="evaluationMatchesPeriod
+            ? 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'"
           @click="generateEvaluation"
+          :title="`Сформировать LLM-отчёт за: ${periodLabel}`"
         >
           <Loader2 v-if="evaluating" class="w-4 h-4 animate-spin" />
           <Sparkles v-else class="w-4 h-4" />
-          Сформировать отчёт
+          {{ evaluationMatchesPeriod ? 'Обновить отчёт' : 'Сформировать отчёт' }}
         </button>
       </div>
     </div>
 
+    <!-- Custom dates — right below the period row -->
+    <div v-if="showCustom" class="flex items-center gap-3 flex-wrap bg-white border border-gray-200 rounded-xl px-4 py-3">
+      <span class="text-sm text-gray-500">С</span>
+      <input type="date" v-model="customFrom"
+        class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+      <span class="text-sm text-gray-500">по</span>
+      <input type="date" v-model="customTo"
+        class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+    </div>
+
     <!-- Period evaluation report -->
-    <div v-if="evaluating" class="bg-white rounded-xl border border-gray-200 p-6 flex items-center gap-3 text-gray-500">
-      <Loader2 class="w-5 h-5 animate-spin text-primary-500" />
-      <span class="text-sm">LLM анализирует звонки сотрудника...</span>
+    <div v-if="evaluating" class="bg-white rounded-xl border border-primary-200 p-5 flex items-center gap-3">
+      <Loader2 class="w-5 h-5 animate-spin text-primary-500 shrink-0" />
+      <div>
+        <p class="text-sm font-medium text-gray-800">Формируется отчёт...</p>
+        <p class="text-xs text-gray-400 mt-0.5">LLM анализирует {{ periodLabel }}</p>
+      </div>
     </div>
 
     <template v-else-if="latestEvaluation">
+      <!-- Stale warning -->
+      <div v-if="!evaluationMatchesPeriod"
+        class="flex items-center gap-2.5 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+        <Sparkles class="w-4 h-4 shrink-0" />
+        Отчёт сформирован за другой период.
+        Нажмите <strong>"Сформировать отчёт"</strong> чтобы получить данные за <em>{{ periodLabel }}</em>.
+      </div>
+
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <Sparkles class="w-4 h-4 text-primary-500" />
-            <h3 class="text-base font-semibold text-gray-900">Итоговый отчёт</h3>
-            <span class="text-xs text-gray-400">{{ formatDate(latestEvaluation.createdAt) }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-gray-500">{{ latestEvaluation.callCount }} зв.</span>
-            <span v-if="latestEvaluation.avgScore != null"
-              class="text-sm font-semibold"
-              :class="(latestEvaluation.avgScore ?? 0) >= 70 ? 'text-green-600' : (latestEvaluation.avgScore ?? 0) >= 50 ? 'text-yellow-600' : 'text-red-500'">
-              {{ Math.round(latestEvaluation.avgScore) }}
-            </span>
-            <span v-if="parseAssessment(latestEvaluation.assessment)?.performance_level"
-              class="px-2 py-0.5 rounded-full text-xs font-medium"
-              :class="performanceLabel(parseAssessment(latestEvaluation.assessment)?.performance_level).cls">
-              {{ performanceLabel(parseAssessment(latestEvaluation.assessment)?.performance_level).text }}
-            </span>
-          </div>
+        <div class="px-5 py-3.5 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+          <Sparkles class="w-4 h-4 text-primary-500 shrink-0" />
+          <h3 class="text-base font-semibold text-gray-900">Итоговый отчёт</h3>
+
+          <!-- Period badge -->
+          <span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs">
+            {{ latestEvaluation.periodFrom
+                ? new Date(latestEvaluation.periodFrom).toLocaleDateString('ru-RU', {day:'numeric',month:'short'})
+                : '∞' }}
+            —
+            {{ latestEvaluation.periodTo
+                ? new Date(latestEvaluation.periodTo).toLocaleDateString('ru-RU', {day:'numeric',month:'short'})
+                : 'сейчас' }}
+          </span>
+
+          <span class="text-xs text-gray-400 ml-auto">{{ formatDate(latestEvaluation.createdAt) }} · {{ latestEvaluation.callCount }} зв.</span>
+
+          <span v-if="latestEvaluation.avgScore != null"
+            class="text-sm font-semibold"
+            :class="(latestEvaluation.avgScore ?? 0) >= 70 ? 'text-green-600' : (latestEvaluation.avgScore ?? 0) >= 50 ? 'text-yellow-600' : 'text-red-500'">
+            ср. {{ Math.round(latestEvaluation.avgScore) }}
+          </span>
+          <span v-if="parseAssessment(latestEvaluation.assessment)?.performance_level"
+            class="px-2 py-0.5 rounded-full text-xs font-medium"
+            :class="performanceLabel(parseAssessment(latestEvaluation.assessment)?.performance_level).cls">
+            {{ performanceLabel(parseAssessment(latestEvaluation.assessment)?.performance_level).text }}
+          </span>
         </div>
 
-        <div v-if="parseAssessment(latestEvaluation.assessment) as Assessment | null" class="p-5 space-y-4">
+        <div class="p-5 space-y-4">
           <p v-if="parseAssessment(latestEvaluation.assessment)?.summary_text"
             class="text-sm text-gray-700 leading-relaxed">
             {{ parseAssessment(latestEvaluation.assessment)?.summary_text }}
           </p>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- Strengths -->
             <div v-if="parseAssessment(latestEvaluation.assessment)?.strengths?.length">
               <div class="flex items-center gap-1.5 mb-2 text-green-700 text-xs font-semibold uppercase tracking-wide">
                 <TrendingUp class="w-3.5 h-3.5" /> Сильные стороны
@@ -317,7 +381,6 @@ function formatPhone(p: string) {
               </ul>
             </div>
 
-            <!-- Weaknesses -->
             <div v-if="parseAssessment(latestEvaluation.assessment)?.weaknesses?.length">
               <div class="flex items-center gap-1.5 mb-2 text-red-600 text-xs font-semibold uppercase tracking-wide">
                 <TrendingDown class="w-3.5 h-3.5" /> Зоны роста
@@ -330,7 +393,6 @@ function formatPhone(p: string) {
               </ul>
             </div>
 
-            <!-- Recommendations -->
             <div v-if="parseAssessment(latestEvaluation.assessment)?.top_recommendations?.length">
               <div class="flex items-center gap-1.5 mb-2 text-primary-700 text-xs font-semibold uppercase tracking-wide">
                 <Minus class="w-3.5 h-3.5" /> Рекомендации
@@ -347,14 +409,11 @@ function formatPhone(p: string) {
       </div>
     </template>
 
-    <!-- Custom dates -->
-    <div v-if="showCustom" class="flex items-center gap-3 flex-wrap bg-white border border-gray-200 rounded-xl px-4 py-3">
-      <span class="text-sm text-gray-500">С</span>
-      <input type="date" v-model="customFrom"
-        class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
-      <span class="text-sm text-gray-500">по</span>
-      <input type="date" v-model="customTo"
-        class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+    <!-- No evaluation yet -->
+    <div v-else-if="!evaluationsLoading"
+      class="flex items-center gap-3 px-5 py-4 bg-gray-50 border border-dashed border-gray-200 rounded-xl text-sm text-gray-400">
+      <Sparkles class="w-4 h-4 shrink-0" />
+      Отчёт ещё не формировался. Нажмите <strong class="text-primary-600 ml-1">"Сформировать отчёт"</strong> чтобы получить итоговую оценку за {{ periodLabel }}.
     </div>
 
     <!-- Stats cards -->
