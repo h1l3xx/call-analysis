@@ -7,6 +7,7 @@ import {
 } from 'lucide-vue-next'
 import { managersApi, callsApi } from '@/api'
 import type { ManagerResponse, CallResponse } from '@/types'
+// CallResponse.source used as display label; overallScore available only in CallDetailResponse
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
 
@@ -103,13 +104,6 @@ async function fetchCalls() {
 
 onMounted(() => { fetchManager(); fetchStats(); fetchCalls() })
 watch(periodMs, fetchStats)
-
-function scoreClass(score?: number | null) {
-  if (!score) return 'text-gray-400'
-  if (score >= 70) return 'text-green-600 font-semibold'
-  if (score >= 50) return 'text-yellow-600 font-semibold'
-  return 'text-red-500 font-semibold'
-}
 
 function formatPhone(p: string) {
   if (p.length === 11 && p.startsWith('7'))
@@ -256,14 +250,11 @@ function formatPhone(p: string) {
                   {{ c.callType === 'internal' ? 'Внутренний' : 'Внешний' }}
                 </span>
               </div>
-              <p class="text-sm text-gray-700 truncate">{{ c.audioFilename || c.id }}</p>
+              <p class="text-sm text-gray-700 truncate">{{ c.source || c.id }}</p>
             </div>
             <div class="flex items-center gap-3 shrink-0">
               <span v-if="c.durationSeconds" class="text-xs text-gray-400 flex items-center gap-1">
                 <Clock class="w-3 h-3" /> {{ formatDuration(c.durationSeconds) }}
-              </span>
-              <span v-if="c.overallScore != null" :class="['text-sm', scoreClass(c.overallScore)]">
-                {{ Math.round(c.overallScore) }}
               </span>
               <CallStatusBadge :status="c.status" />
             </div>
