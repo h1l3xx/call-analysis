@@ -338,8 +338,13 @@ class CallService(
             .map { mapOf("id" to it[d.id].toString(), "name" to it[d.name]) }
     }
 
-    fun getStats(schema: String, managerId: UUID? = null): Map<String, Long> {
-        val byStatus = callRepo.countByStatus(schema, managerId)
+    fun getStats(
+        schema: String,
+        managerId: UUID? = null,
+        since: Long? = null,
+        until: Long? = null,
+    ): Map<String, Any> {
+        val byStatus = callRepo.countByStatus(schema, managerId, since, until)
         val processing = listOf("queued", "processing", "analyzing", "transcribing")
             .sumOf { byStatus[it] ?: 0L }
         val done = listOf("done", "transcribed_only", "no_speech")
@@ -347,9 +352,11 @@ class CallService(
         val failed = byStatus["failed"] ?: 0L
         val total = byStatus.values.sum()
         val noSpeech = byStatus["no_speech"] ?: 0L
+        val avgScore = callRepo.avgScore(schema, managerId, since, until)
         return mapOf(
             "total" to total, "processing" to processing,
             "done" to done, "failed" to failed, "noSpeech" to noSpeech,
+            "avgScore" to (avgScore ?: 0.0),
         )
     }
 

@@ -14,8 +14,8 @@ export const callsApi = {
   departments() {
     return client.get<{ id: string; name: string }[]>('/api/v1/calls/departments')
   },
-  stats() {
-    return client.get<{ total: number; processing: number; done: number; failed: number; noSpeech: number }>('/api/v1/calls/stats')
+  stats(params: { since?: number; until?: number } = {}) {
+    return client.get<{ total: number; processing: number; done: number; failed: number; noSpeech: number; avgScore: number }>('/api/v1/calls/stats', { params })
   },
   get(id: string) {
     return client.get<CallDetailResponse>(`/api/v1/calls/${id}`)

@@ -489,16 +489,48 @@ class CallRepository {
             .associate { it[m.id] to it[Users.fullName] }
     }
 
-    fun countByStatus(schema: String, managerId: UUID? = null): Map<String, Long> = transaction {
+    fun countByStatus(
+        schema: String,
+        managerId: UUID? = null,
+        since: Long? = null,
+        until: Long? = null,
+    ): Map<String, Long> = transaction {
         val cl = TCalls(schema)
-        val query = if (managerId != null) {
+        val conditions = mutableListOf<Op<Boolean>>()
+        if (managerId != null) conditions.add(Op.build { cl.managerId eq managerId })
+        if (since != null)     conditions.add(Op.build { cl.createdAt greaterEq since })
+        if (until != null)     conditions.add(Op.build { cl.createdAt lessEq until })
+        val where = conditions.reduceOrNull { a, b -> a and b }
+        val query = if (where != null)
+            cl.select(cl.status, cl.id.count()).where(where)
+        else
             cl.select(cl.status, cl.id.count())
-                .where { cl.managerId eq managerId }
-        } else {
-            cl.select(cl.status, cl.id.count())
-        }
         query.groupBy(cl.status)
             .associate { it[cl.status] to it[cl.id.count()] }
+    }
+
+    fun avgScore(
+        schema: String,
+        managerId: UUID? = null,
+        since: Long? = null,
+        until: Long? = null,
+    ): Double? = transaction {
+        val cl = TCalls(schema)
+        val qs = TQualityScores(schema)
+        val conditions = mutableListOf<Op<Boolean>>(
+            Op.build { cl.status eq "done" },
+            Op.build { qs.overallScore.isNotNull() },
+        )
+        if (managerId != null) conditions.add(Op.build { cl.managerId eq managerId })
+        if (since != null)     conditions.add(Op.build { cl.createdAt greaterEq since })
+        if (until != null)     conditions.add(Op.build { cl.createdAt lessEq until })
+        val where = conditions.reduce { a, b -> a and b }
+        cl.join(qs, JoinType.INNER, cl.id, qs.callId)
+            .select(qs.overallScore.avg())
+            .where(where)
+            .singleOrNull()
+            ?.get(qs.overallScore.avg())
+            ?.toDouble()
     }
 
     private fun ResultRow.toCallRow(cl: TCalls, m: TManagers, s: TScripts) = CallRow(

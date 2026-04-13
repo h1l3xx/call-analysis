@@ -195,7 +195,9 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
             val managerId = if (p.roleEnum == Role.MANAGER) {
                 service.getManagerIdByUserId(p.schema!!, UUID.fromString(p.userId))
             } else null
-            call.respond(service.getStats(p.schema!!, managerId))
+            val since = call.parameters["since"]?.toLongOrNull()
+            val until = call.parameters["until"]?.toLongOrNull()
+            call.respond(service.getStats(p.schema!!, managerId, since, until))
         }
 
         // ── Список звонков ──
