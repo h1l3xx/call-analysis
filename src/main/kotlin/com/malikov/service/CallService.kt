@@ -241,21 +241,16 @@ class CallService(
                 )
 
                 val ext = p.filename.substringAfterLast('.', "wav").lowercase()
-                var persistentFile: File? = null
                 try {
                     val audioKey = audioStorage.save(schema, callId, ext, p.audioFile)
                     callRepo.updateAudioKey(schema, callId, audioKey)
-                    persistentFile = audioStorage.getFile(audioKey)
                 } catch (e: Exception) {
                     log.error("Failed to save audio for call {} (schema={}): {}", callId, schema, e.message, e)
-                } finally {
-                    p.audioFile.delete()
                 }
-
-                if (persistentFile != null) {
-                    queuedCallIds.add(callId)
-                    queuedFiles.add(persistentFile)
-                }
+                // Temp-файл передаём в pipeline — phaseTranscribe удалит его после обработки.
+                // Persistent-копия в audioStorage остаётся нетронутой.
+                queuedCallIds.add(callId)
+                queuedFiles.add(p.audioFile)
                 queued++
                 results.add(BulkUploadItemResult(
                     filename = p.filename, status = "queued",
@@ -280,12 +275,20 @@ class CallService(
         }
 
         if (isFinal) {
-            // For the final (or only) chunk collect ALL files saved for this batch from storage
             val allCallFiles = if (existingBatchId != null) {
+                // Chunked upload: собираем все файлы батча из persistent storage.
+                // Делаем temp-копии — phaseTranscribe удалит их после обработки,
+                // а оригиналы в audioStorage останутся нетронутыми.
                 callRepo.listAudioKeysByBatch(schema, batchId).mapNotNull { (callId, key) ->
-                    audioStorage.getFile(key)?.let { callId to it }
+                    audioStorage.getFile(key)?.let { persistent ->
+                        val ext = key.substringAfterLast('.', "wav")
+                        val tmp = File.createTempFile("pipeline_chunk_", ".$ext")
+                        persistent.copyTo(tmp, overwrite = true)
+                        callId to tmp
+                    }
                 }
             } else {
+                // Single-chunk: temp-файлы уже в queuedFiles
                 queuedCallIds.zip(queuedFiles)
             }
             batchProcessingService.startBatchProcessing(
