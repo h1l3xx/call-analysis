@@ -5,6 +5,8 @@
 import base64
 import json
 import logging
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -150,6 +152,64 @@ class AudioPreprocessor:
         self.format_stats["decoded_files"] += 1
         return Path(temp_file.name)
 
+    def _ffmpeg_convert_to_wav(self, source_path: Path, original_path: Path) -> Path:
+        """
+        Конвертирует аудио в WAV через системный ffmpeg.
+        Используется как fallback когда librosa/audioread не смогли открыть файл.
+
+        Returns:
+            Path: Путь к временному WAV-файлу.
+        Raises:
+            ValueError: Если ffmpeg не найден или не смог декодировать файл.
+        """
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            raise ValueError(
+                f"CORRUPTED_AUDIO: Не удалось открыть файл ни одним декодером. "
+                f"ffmpeg не найден в PATH. Файл: {original_path.name}"
+            )
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp.close()
+        out_path = Path(tmp.name)
+
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-i", str(source_path),
+            "-ar", str(self.target_sr),
+            "-ac", "1",
+            "-f", "wav",
+            str(out_path),
+        ]
+
+        logger.info(f"ffmpeg fallback: {' '.join(cmd)}")
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            out_path.unlink(missing_ok=True)
+            raise ValueError(
+                f"CORRUPTED_AUDIO: ffmpeg timeout при обработке {original_path.name}"
+            )
+
+        if result.returncode != 0:
+            out_path.unlink(missing_ok=True)
+            stderr_tail = result.stderr[-500:] if result.stderr else ""
+            raise ValueError(
+                f"CORRUPTED_AUDIO: ffmpeg не смог декодировать {original_path.name}. "
+                f"stderr: {stderr_tail}"
+            )
+
+        logger.info(
+            f"✓ ffmpeg fallback успешен: {original_path.name} → {out_path.name} "
+            f"({out_path.stat().st_size} bytes)"
+        )
+        return out_path
+
     def _generate_wake_signal(self, samples: int, target_rms: float) -> np.ndarray:
         """
         Генерация wake-signal (универсальный громкий сигнал).
@@ -211,9 +271,24 @@ class AudioPreprocessor:
         try:
             # ⭐ НОВОЕ: Автоматическое определение и декодирование формата
             decoded_path = self._detect_and_decode_json_audio(input_path_obj)
-            
-            # Загрузка аудио с валидацией
-            audio, sr = librosa.load(str(decoded_path), sr=self.target_sr, mono=True)
+
+            # Загрузка аудио с валидацией.
+            # Для форматов, которые soundfile не поддерживает (MP3, M4A, AAC и т.д.),
+            # librosa сначала пробует soundfile, затем audioread.
+            # Если audioread тоже не справился — делаем прямой fallback через ffmpeg.
+            try:
+                audio, sr = librosa.load(str(decoded_path), sr=self.target_sr, mono=True)
+            except Exception as librosa_err:
+                err_type = type(librosa_err).__name__
+                if "NoBackendError" in err_type or "NoBackendError" in str(librosa_err):
+                    logger.warning(
+                        f"librosa/audioread не смогли открыть {decoded_path.name} "
+                        f"[{err_type}] — пробуем конвертацию через ffmpeg напрямую"
+                    )
+                    decoded_path = self._ffmpeg_convert_to_wav(decoded_path, input_path_obj)
+                    audio, sr = librosa.load(str(decoded_path), sr=self.target_sr, mono=True)
+                else:
+                    raise
             
             # ⭐ ВАЛИДАЦИЯ: проверка sample rate и данных
             if sr is None or sr == 0:
