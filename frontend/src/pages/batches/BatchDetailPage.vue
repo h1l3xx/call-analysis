@@ -290,6 +290,9 @@ function openCallsModal(title: string, callIds: string[]) {
           <div v-if="batch.noSpeechCount" class="flex items-center gap-1.5">
             <span class="text-gray-400 text-xs">Без речи: {{ batch.noSpeechCount }}</span>
           </div>
+          <div v-if="batch.transcribedOnlyCount" class="flex items-center gap-1.5">
+            <span class="text-yellow-500 text-xs">Без оценки: {{ batch.transcribedOnlyCount }}</span>
+          </div>
           <div v-if="batch.failedCount" class="flex items-center gap-1.5">
             <span class="text-red-400 text-xs">Ошибки: {{ batch.failedCount }}</span>
           </div>

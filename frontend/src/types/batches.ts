@@ -15,6 +15,7 @@ export interface BatchResponse {
   callTypeStats: CallTypeStats | null
   noSpeechCount: number
   failedCount: number
+  transcribedOnlyCount: number
   createdAt: number
   finishedAt: number | null
 }

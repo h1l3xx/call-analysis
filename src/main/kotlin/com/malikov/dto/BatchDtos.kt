@@ -11,6 +11,7 @@ data class BatchResponse(
     val callTypeStats: CallTypeStatsResponse?,
     val noSpeechCount: Int = 0,
     val failedCount: Int = 0,
+    val transcribedOnlyCount: Int = 0,
     val createdAt: Long,
     val finishedAt: Long?,
 )

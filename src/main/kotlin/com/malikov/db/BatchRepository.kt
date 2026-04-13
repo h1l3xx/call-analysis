@@ -24,6 +24,7 @@ data class BatchRow(
     val callTypeStats: String?,
     val noSpeechCount: Int = 0,
     val failedCount: Int = 0,
+    val transcribedOnlyCount: Int = 0,
     val createdAt: Long,
     val finishedAt: Long?,
 )
@@ -244,6 +245,7 @@ class BatchRepository {
         callTypeStats = this[b.callTypeStats],
         noSpeechCount = statusCounts["no_speech"] ?: 0,
         failedCount = statusCounts["failed"] ?: 0,
+        transcribedOnlyCount = statusCounts["transcribed_only"] ?: 0,
         createdAt = this[b.createdAt],
         finishedAt = this[b.finishedAt],
     )

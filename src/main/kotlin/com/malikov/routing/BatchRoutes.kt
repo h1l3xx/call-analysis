@@ -203,6 +203,7 @@ private fun com.malikov.db.BatchRow.toBatchResponse(): BatchResponse {
         callTypeStats = statsJson,
         noSpeechCount = noSpeechCount,
         failedCount = failedCount,
+        transcribedOnlyCount = transcribedOnlyCount,
         createdAt = createdAt,
         finishedAt = finishedAt,
     )
