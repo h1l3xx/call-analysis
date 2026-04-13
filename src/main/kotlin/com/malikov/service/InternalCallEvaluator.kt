@@ -191,41 +191,100 @@ $EXTERNAL_JSON_FORMAT
             fallback
         }
 
-    private fun callLlm(prompt: String): String = callLlmRaw(prompt, temperature = 0.1)
+    private fun callLlm(prompt: String, maxAttempts: Int = 3): String = callLlmRaw(
+        prompt = prompt,
+        temperature = 0.1,
+        maxAttempts = maxAttempts,
+        requireJson = true,
+    )
 
-    private fun callLlmRaw(prompt: String, temperature: Double = 0.1): String {
+    private fun callLlmRaw(
+        prompt: String,
+        temperature: Double = 0.1,
+        maxAttempts: Int = 1,
+        requireJson: Boolean = false,
+    ): String {
         return kotlinx.coroutines.runBlocking {
-            val response = client.post("$llmBaseUrl/chat/completions") {
-                header("Authorization", "Bearer $llmApiKey")
-                contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(LlmRequest(
-                    model = llmModel,
-                    messages = listOf(
-                        LlmMessage("system", SYSTEM_PROMPT),
-                        LlmMessage("user", prompt),
-                    ),
-                    responseFormat = LlmResponseFormat("json_object"),
-                    temperature = temperature,
-                    maxTokens = 4096,
-                )))
-            }
+            val messages = mutableListOf(
+                LlmMessage("system", SYSTEM_PROMPT),
+                LlmMessage("user", prompt),
+            )
 
-            if (!response.status.isSuccess()) {
-                val err = response.body<String>()
-                throw RuntimeException("LLM API error [${response.status}]: ${err.take(500)}")
-            }
+            for (attempt in 1..maxAttempts) {
+                val response = client.post("$llmBaseUrl/chat/completions") {
+                    header("Authorization", "Bearer $llmApiKey")
+                    contentType(ContentType.Application.Json)
+                    setBody(json.encodeToString(LlmRequest(
+                        model = llmModel,
+                        messages = messages.toList(),
+                        responseFormat = LlmResponseFormat("json_object"),
+                        temperature = temperature,
+                        maxTokens = 4096,
+                    )))
+                }
 
-            val result = response.body<LlmResponse>()
-            result.choices.firstOrNull()?.message?.content
-                ?: throw RuntimeException("Empty LLM response")
+                if (!response.status.isSuccess()) {
+                    val err = response.body<String>()
+                    throw RuntimeException("LLM API error [${response.status}]: ${err.take(500)}")
+                }
+
+                val result = response.body<LlmResponse>()
+                val content = result.choices.firstOrNull()?.message?.content
+                    ?: throw RuntimeException("Empty LLM response")
+
+                if (!requireJson) return@runBlocking content
+
+                try {
+                    // Strict validation — must be parseable by standard JSON parser (same as PostgreSQL jsonb)
+                    kotlinx.serialization.json.Json.Default.parseToJsonElement(content)
+                    return@runBlocking content
+                } catch (e: Exception) {
+                    if (attempt == maxAttempts) {
+                        log.error(
+                            "LLM failed to produce valid JSON after {} attempts, last response ({} chars): {}…",
+                            maxAttempts, content.length, content.takeLast(300),
+                        )
+                        throw RuntimeException("LLM returned invalid JSON after $maxAttempts attempts: ${e.message}")
+                    }
+                    log.warn("LLM returned invalid JSON on attempt {} — asking to fix. Error: {}", attempt, e.message)
+                    messages.add(LlmMessage("assistant", content))
+                    messages.add(LlmMessage("user",
+                        "Твой ответ содержит невалидный JSON. Возможно, в строке оказались неэкранированные символы " +
+                        "или ответ был обрезан. Исправь и верни ПОЛНЫЙ валидный JSON. " +
+                        "Не добавляй никакого текста за пределами JSON-объекта."
+                    ))
+                }
+            }
+            throw RuntimeException("Unreachable")
         }
     }
+
+    /**
+     * Ensures the JSON string is valid for PostgreSQL jsonb.
+     * If strict parsing fails, returns a minimal error JSON rather than crashing the DB insert.
+     */
+    private fun safeJsonForDb(qualityJson: String): String =
+        try {
+            kotlinx.serialization.json.Json.Default.parseToJsonElement(qualityJson)
+            qualityJson
+        } catch (e: Exception) {
+            log.error("LLM response is not valid JSON for DB storage, using fallback. Error: {}. Snippet: {}…",
+                e.message, qualityJson.take(200))
+            json.encodeToString(
+                kotlinx.serialization.json.JsonObject.serializer(),
+                kotlinx.serialization.json.buildJsonObject {
+                    put("error", kotlinx.serialization.json.JsonPrimitive("LLM response was not valid JSON"))
+                    put("overall_score", kotlinx.serialization.json.JsonPrimitive(0.0))
+                }
+            )
+        }
 
     private fun saveInternalQuality(schema: String, callId: UUID, qualityJson: String) =
         transaction {
             val qs = TQualityScores(schema)
+            val safeJson = safeJsonForDb(qualityJson)
             val parsed = try {
-                json.parseToJsonElement(qualityJson) as? kotlinx.serialization.json.JsonObject
+                json.parseToJsonElement(safeJson) as? kotlinx.serialization.json.JsonObject
             } catch (_: Exception) { null }
 
             val overallScore = parsed?.get("overall_score")
@@ -237,10 +296,10 @@ $EXTERNAL_JSON_FORMAT
             qs.insert {
                 it[qs.callId] = callId
                 it[qs.overallScore] = overallScore
-                it[qs.criteria] = qualityJson
-                it[qs.strengths] = extractJsonArray(qualityJson, "strengths")
-                it[qs.weaknesses] = extractJsonArray(qualityJson, "weaknesses")
-                it[qs.recommendations] = extractJsonArray(qualityJson, "recommendations")
+                it[qs.criteria] = safeJson
+                it[qs.strengths] = extractJsonArray(safeJson, "strengths")
+                it[qs.weaknesses] = extractJsonArray(safeJson, "weaknesses")
+                it[qs.recommendations] = extractJsonArray(safeJson, "recommendations")
                 it[qs.summary] = summary
                 it[qs.processedAt] = System.currentTimeMillis()
             }

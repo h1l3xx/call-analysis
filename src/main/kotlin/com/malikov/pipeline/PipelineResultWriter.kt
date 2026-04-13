@@ -141,8 +141,19 @@ class PipelineResultWriter {
         qualityJson: String,
     ) = transaction {
         val qs = TQualityScores(schema)
+
+        // Validate strictly before inserting into jsonb column — PostgreSQL parser is stricter than kotlinx
+        val safeJson = try {
+            kotlinx.serialization.json.Json.Default.parseToJsonElement(qualityJson)
+            qualityJson
+        } catch (e: Exception) {
+            log.error("LLM quality JSON is invalid for DB (call={}, script={}), using fallback. Error: {}. Snippet: {}…",
+                callId, scriptId, e.message, qualityJson.take(200))
+            """{"error":"LLM response was not valid JSON","overall_score":0}"""
+        }
+
         val parsed = try {
-            json.parseToJsonElement(qualityJson) as? kotlinx.serialization.json.JsonObject
+            json.parseToJsonElement(safeJson) as? kotlinx.serialization.json.JsonObject
         } catch (_: Exception) { null }
 
         val overallScore = parsed?.get("overall_score")
@@ -158,7 +169,7 @@ class PipelineResultWriter {
             it[qs.callId] = callId
             it[qs.scriptId] = scriptId
             it[qs.overallScore] = overallScore
-            it[qs.criteria] = qualityJson
+            it[qs.criteria] = safeJson
             it[qs.strengths] = extractArray("strengths")
             it[qs.weaknesses] = extractArray("weaknesses")
             it[qs.recommendations] = extractArray("recommendations")
