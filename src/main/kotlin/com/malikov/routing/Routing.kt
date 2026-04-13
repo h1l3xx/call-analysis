@@ -44,7 +44,7 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
         authenticate("jwt") {
 
             route("/api/v1") {
-                managerRoutes(services.managerService)
+                managerRoutes(services.managerService, services.managerEvaluationService)
                 scriptRoutes(services.scriptService)
                 callRoutes(services.callService, services.audioStorageService, services.batchExportService, services.batchProcessingService)
                 batchRoutes(services.batchRepository, services.callRepository, services.managerRepository, services.batchSummaryService, services.batchExportService, services.callService)

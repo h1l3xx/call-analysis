@@ -4,7 +4,7 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
   ArrowLeft, CalendarDays, Phone, Building, Star,
   CheckCircle2, AlertTriangle, VolumeX, Clock, ChevronRight,
-  Download, RotateCcw, Loader2,
+  Download, Sparkles, Loader2, TrendingUp, TrendingDown, Minus,
 } from 'lucide-vue-next'
 import { managersApi, callsApi } from '@/api'
 import type { ManagerResponse, CallResponse } from '@/types'
@@ -118,25 +118,55 @@ async function exportCalls() {
   }
 }
 
-// ── Re-evaluate ───────────────────────────────────────────────────────────────
-const reevaluating = ref(false)
-const reevaluateResult = ref<string | null>(null)
+// ── Period evaluation (manager assessment) ────────────────────────────────────
+import type { ManagerEvaluationResponse } from '@/types'
 
-async function reevaluateCalls() {
-  if (!confirm('Отправить звонки сотрудника на повторную оценку LLM за выбранный период?')) return
-  reevaluating.value = true
-  reevaluateResult.value = null
+const evaluating = ref(false)
+const latestEvaluation = ref<ManagerEvaluationResponse | null>(null)
+const evaluationsLoading = ref(false)
+
+interface Assessment {
+  summary_text?: string
+  strengths?: string[]
+  weaknesses?: string[]
+  top_recommendations?: string[]
+  performance_level?: 'high' | 'medium' | 'low'
+}
+
+function parseAssessment(raw: string | null): Assessment | null {
+  if (!raw) return null
+  try { return JSON.parse(raw) } catch { return null }
+}
+
+function performanceLabel(level?: string) {
+  if (level === 'high') return { text: 'Высокий', cls: 'bg-green-100 text-green-700' }
+  if (level === 'low')  return { text: 'Низкий',  cls: 'bg-red-100 text-red-700' }
+  return { text: 'Средний', cls: 'bg-yellow-100 text-yellow-700' }
+}
+
+async function fetchLatestEvaluation() {
+  evaluationsLoading.value = true
   try {
-    const { data } = await callsApi.reevaluate(managerId.value, periodMs.value)
-    reevaluateResult.value = `Поставлено в очередь: ${data.queued} звонков`
-  } catch {
-    reevaluateResult.value = 'Ошибка при запуске переоценки'
-  } finally {
-    reevaluating.value = false
+    const { data } = await managersApi.listEvaluations(managerId.value)
+    latestEvaluation.value = data[0] ?? null
+  } catch { /* ignore */ } finally {
+    evaluationsLoading.value = false
   }
 }
 
-onMounted(() => { fetchManager(); fetchStats(); fetchCalls() })
+async function generateEvaluation() {
+  evaluating.value = true
+  try {
+    const { data } = await managersApi.evaluate(managerId.value, periodMs.value)
+    latestEvaluation.value = data
+  } catch (e: any) {
+    alert(e?.response?.data?.error ?? 'Ошибка при формировании отчёта')
+  } finally {
+    evaluating.value = false
+  }
+}
+
+onMounted(() => { fetchManager(); fetchStats(); fetchCalls(); fetchLatestEvaluation() })
 watch(periodMs, fetchStats)
 
 function callLabel(c: CallResponse): string {
@@ -227,24 +257,95 @@ function formatPhone(p: string) {
           Выгрузить CSV
         </button>
         <button
-          :disabled="reevaluating"
+          :disabled="evaluating"
           class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 disabled:opacity-50 transition-colors"
-          @click="reevaluateCalls"
+          @click="generateEvaluation"
         >
-          <Loader2 v-if="reevaluating" class="w-4 h-4 animate-spin" />
-          <RotateCcw v-else class="w-4 h-4" />
-          Переоценить
+          <Loader2 v-if="evaluating" class="w-4 h-4 animate-spin" />
+          <Sparkles v-else class="w-4 h-4" />
+          Сформировать отчёт
         </button>
       </div>
     </div>
 
-    <!-- Re-evaluate result toast -->
-    <div v-if="reevaluateResult"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm"
-      :class="reevaluateResult.startsWith('Ошибка') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'">
-      {{ reevaluateResult }}
-      <button class="ml-auto text-current opacity-50 hover:opacity-100" @click="reevaluateResult = null">✕</button>
+    <!-- Period evaluation report -->
+    <div v-if="evaluating" class="bg-white rounded-xl border border-gray-200 p-6 flex items-center gap-3 text-gray-500">
+      <Loader2 class="w-5 h-5 animate-spin text-primary-500" />
+      <span class="text-sm">LLM анализирует звонки сотрудника...</span>
     </div>
+
+    <template v-else-if="latestEvaluation">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Sparkles class="w-4 h-4 text-primary-500" />
+            <h3 class="text-base font-semibold text-gray-900">Итоговый отчёт</h3>
+            <span class="text-xs text-gray-400">{{ formatDate(latestEvaluation.createdAt) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500">{{ latestEvaluation.callCount }} зв.</span>
+            <span v-if="latestEvaluation.avgScore != null"
+              class="text-sm font-semibold"
+              :class="(latestEvaluation.avgScore ?? 0) >= 70 ? 'text-green-600' : (latestEvaluation.avgScore ?? 0) >= 50 ? 'text-yellow-600' : 'text-red-500'">
+              {{ Math.round(latestEvaluation.avgScore) }}
+            </span>
+            <span v-if="parseAssessment(latestEvaluation.assessment)?.performance_level"
+              class="px-2 py-0.5 rounded-full text-xs font-medium"
+              :class="performanceLabel(parseAssessment(latestEvaluation.assessment)?.performance_level).cls">
+              {{ performanceLabel(parseAssessment(latestEvaluation.assessment)?.performance_level).text }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="parseAssessment(latestEvaluation.assessment) as Assessment | null" class="p-5 space-y-4">
+          <p v-if="parseAssessment(latestEvaluation.assessment)?.summary_text"
+            class="text-sm text-gray-700 leading-relaxed">
+            {{ parseAssessment(latestEvaluation.assessment)?.summary_text }}
+          </p>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Strengths -->
+            <div v-if="parseAssessment(latestEvaluation.assessment)?.strengths?.length">
+              <div class="flex items-center gap-1.5 mb-2 text-green-700 text-xs font-semibold uppercase tracking-wide">
+                <TrendingUp class="w-3.5 h-3.5" /> Сильные стороны
+              </div>
+              <ul class="space-y-1">
+                <li v-for="s in parseAssessment(latestEvaluation.assessment)?.strengths" :key="s"
+                  class="text-sm text-gray-700 flex gap-2">
+                  <span class="text-green-500 shrink-0">✓</span>{{ s }}
+                </li>
+              </ul>
+            </div>
+
+            <!-- Weaknesses -->
+            <div v-if="parseAssessment(latestEvaluation.assessment)?.weaknesses?.length">
+              <div class="flex items-center gap-1.5 mb-2 text-red-600 text-xs font-semibold uppercase tracking-wide">
+                <TrendingDown class="w-3.5 h-3.5" /> Зоны роста
+              </div>
+              <ul class="space-y-1">
+                <li v-for="w in parseAssessment(latestEvaluation.assessment)?.weaknesses" :key="w"
+                  class="text-sm text-gray-700 flex gap-2">
+                  <span class="text-red-400 shrink-0">✗</span>{{ w }}
+                </li>
+              </ul>
+            </div>
+
+            <!-- Recommendations -->
+            <div v-if="parseAssessment(latestEvaluation.assessment)?.top_recommendations?.length">
+              <div class="flex items-center gap-1.5 mb-2 text-primary-700 text-xs font-semibold uppercase tracking-wide">
+                <Minus class="w-3.5 h-3.5" /> Рекомендации
+              </div>
+              <ul class="space-y-1">
+                <li v-for="r in parseAssessment(latestEvaluation.assessment)?.top_recommendations" :key="r"
+                  class="text-sm text-gray-700 flex gap-2">
+                  <span class="text-primary-400 shrink-0">→</span>{{ r }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- Custom dates -->
     <div v-if="showCustom" class="flex items-center gap-3 flex-wrap bg-white border border-gray-200 rounded-xl px-4 py-3">

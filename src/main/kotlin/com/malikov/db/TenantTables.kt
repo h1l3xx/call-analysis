@@ -219,6 +219,19 @@ class TManagerPhoneNumbers(schema: String) : Table("$schema.manager_phone_number
     override val primaryKey = PrimaryKey(id)
 }
 
+class TManagerEvaluations(schema: String) : Table("$schema.manager_evaluations") {
+    val id          = uuid("id").autoGenerate()
+    val managerId   = uuid("manager_id")
+    val periodFrom  = long("period_from").nullable()
+    val periodTo    = long("period_to").nullable()
+    val callCount   = integer("call_count").default(0)
+    val avgScore    = double("avg_score").nullable()
+    val assessment  = jsonb("assessment").nullable()
+    val createdAt   = long("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
 class TDepartmentCallPolicies(schema: String) : Table("$schema.department_call_policies") {
     val id               = uuid("id").autoGenerate()
     val departmentId     = uuid("department_id").nullable()

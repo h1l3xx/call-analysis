@@ -96,6 +96,9 @@ class InternalCallEvaluator(
         return callLlmForExternalEvaluation(schema, transcription, criteria, scriptName, templateId)
     }
 
+    /** Called by ManagerEvaluationService to run a period-level manager assessment prompt. */
+    internal fun callLlmForManagerEvaluation(prompt: String): String = callLlm(prompt, maxAttempts = 3)
+
     fun generateSuggestions(templateId: String, description: String): List<String> {
         val typeLabel = when (templateId) {
             "internal_eval", "eval_internal", "eval_internal_incoming", "eval_internal_outgoing" ->

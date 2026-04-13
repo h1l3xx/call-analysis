@@ -19,6 +19,17 @@ export interface ManagerResponse {
   createdAt: number
 }
 
+export interface ManagerEvaluationResponse {
+  id: string
+  managerId: string
+  periodFrom: number | null
+  periodTo: number | null
+  callCount: number
+  avgScore: number | null
+  assessment: string | null   // raw JSON: { summary_text, strengths[], weaknesses[], top_recommendations[], performance_level }
+  createdAt: number
+}
+
 export interface AddPhoneRequest {
   phoneNumber: string
   label?: string

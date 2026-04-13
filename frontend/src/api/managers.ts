@@ -1,5 +1,5 @@
 import client from './client'
-import type { AddPhoneRequest, ManagerPhoneResponse, ManagerResponse, PaginatedResponse } from '@/types'
+import type { AddPhoneRequest, ManagerEvaluationResponse, ManagerPhoneResponse, ManagerResponse, PaginatedResponse } from '@/types'
 
 export const managersApi = {
   list(params: { page?: number; pageSize?: number; isActive?: boolean } = {}) {
@@ -24,5 +24,13 @@ export const managersApi = {
   },
   removePhone(managerId: string, phoneId: string) {
     return client.delete(`/api/v1/managers/${managerId}/phones/${phoneId}`)
+  },
+
+  // Period evaluations
+  listEvaluations(managerId: string) {
+    return client.get<ManagerEvaluationResponse[]>(`/api/v1/managers/${managerId}/evaluations`)
+  },
+  evaluate(managerId: string, params: { since?: number; until?: number } = {}) {
+    return client.post<ManagerEvaluationResponse>(`/api/v1/managers/${managerId}/evaluate`, null, { params })
   },
 }

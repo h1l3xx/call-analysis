@@ -73,6 +73,11 @@ class ServiceRegistry(config: AppConfig) {
         config.audio.retentionDays, audioStorageService, callRepository,
     )
 
+    // Manager period evaluations
+    val managerEvaluationService = ManagerEvaluationService(
+        callRepository, managerRepository, internalCallEvaluator,
+    )
+
     // Business services
     val managerService     = ManagerService(managerRepository)
     val scriptService      = ScriptService(scriptRepository)

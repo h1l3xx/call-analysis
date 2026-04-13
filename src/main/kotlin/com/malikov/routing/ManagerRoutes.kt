@@ -4,6 +4,7 @@ import com.malikov.auth.Role
 import com.malikov.config.ForbiddenException
 import com.malikov.config.NotFoundException
 import com.malikov.dto.AddPhoneRequest
+import com.malikov.service.ManagerEvaluationService
 import com.malikov.service.ManagerService
 import io.ktor.http.*
 import io.ktor.server.application.call
@@ -12,7 +13,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.util.UUID
 
-fun Route.managerRoutes(service: ManagerService) {
+fun Route.managerRoutes(service: ManagerService, evaluationService: ManagerEvaluationService? = null) {
     route("/managers") {
 
         get {
@@ -65,6 +66,30 @@ fun Route.managerRoutes(service: ManagerService) {
             val phoneId = pathUuid("phoneId")
             service.removePhone(p.schema!!, managerId, phoneId)
             call.respond(HttpStatusCode.NoContent)
+        }
+
+        // ── Period evaluations ──────────────────────────────────────────────
+
+        get("/{id}/evaluations") {
+            val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val managerId = pathUuid("id")
+            val svc = evaluationService ?: run {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Evaluation service unavailable"))
+                return@get
+            }
+            call.respond(svc.list(p.schema!!, managerId))
+        }
+
+        post("/{id}/evaluate") {
+            val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val managerId = pathUuid("id")
+            val since = call.parameters["since"]?.toLongOrNull()
+            val until = call.parameters["until"]?.toLongOrNull()
+            val svc = evaluationService ?: run {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Evaluation service unavailable"))
+                return@post
+            }
+            call.respond(HttpStatusCode.Created, svc.generate(p.schema!!, managerId, since, until))
         }
     }
 }
