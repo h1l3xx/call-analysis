@@ -202,9 +202,10 @@ class CallService(
         } else {
             batchRepo.create(schema, actualTotal, typeStats)
         }
+        // typeStats of subsequent chunks are not tracked at creation — refresh after inserts below
 
         val results = mutableListOf<BulkUploadItemResult>()
-        var queued = 0; var failed = 0
+        var queued = 0; var failed = 0; var preNoSpeech = 0
         val queuedCallIds = mutableListOf<UUID>()
         val queuedFiles = mutableListOf<File>()
 
@@ -246,6 +247,8 @@ class CallService(
                 if (fileSizeBytes < MIN_VALID_AUDIO_BYTES) {
                     val reason = "Пустая запись звонка ($fileSizeBytes байт) — разговор не состоялся или файл повреждён"
                     callRepo.markNoSpeech(schema, callId, reason)
+                    batchRepo.incrementProcessed(schema, batchId)
+                    preNoSpeech++
                     p.audioFile.delete()
                     log.warn("Call {} marked no_speech: file too small ({} bytes), filename={}", callId, fileSizeBytes, p.filename)
                     results.add(BulkUploadItemResult(
@@ -288,9 +291,14 @@ class CallService(
             }
         }
 
-        if (existingBatchId == null && queued != actualTotal) {
-            batchRepo.updateTotalCalls(schema, batchId, queued)
+        // totalCalls = звонки которые реально созданы (очередь + pre-no_speech; без failed manager-not-found)
+        val createdCalls = queued + preNoSpeech
+        if (existingBatchId == null && createdCalls != actualTotal) {
+            batchRepo.updateTotalCalls(schema, batchId, createdCalls)
         }
+
+        // Пересчитываем typeStats из реальных данных (важно для чанковых загрузок)
+        batchRepo.refreshTypeStats(schema, batchId)
 
         if (isFinal) {
             val allCallFiles = if (existingBatchId != null) {

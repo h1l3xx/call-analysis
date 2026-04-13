@@ -86,6 +86,22 @@ class BatchRepository {
         }
     }
 
+    /** Пересчитывает callTypeStats из реальных записей звонков (нужно для чанковых загрузок). */
+    fun refreshTypeStats(schema: String, batchId: UUID) = transaction {
+        val cl = TCalls(schema)
+        val rows = cl.select(cl.callType, cl.callType.count())
+            .where { cl.batchId eq batchId }
+            .groupBy(cl.callType)
+            .associate { it[cl.callType] to it[cl.callType.count()].toInt() }
+        val stats = CallTypeStatsJson(
+            internal         = rows["internal"] ?: 0,
+            externalIncoming = rows["external_incoming"] ?: (rows["external"] ?: 0),
+            externalOutgoing = rows["external_outgoing"] ?: 0,
+        )
+        val b = TBatches(schema)
+        b.update({ b.id eq batchId }) { it[b.callTypeStats] = json.encodeToString(stats) }
+    }
+
     fun deleteById(schema: String, batchId: UUID): Int = transaction {
         val b = TBatches(schema)
         b.deleteWhere { b.id eq batchId }
