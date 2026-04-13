@@ -194,6 +194,15 @@ function parseSummaryContent(content: string | null): Record<string, any> | null
   try { return JSON.parse(content) } catch { return null }
 }
 
+// Числа из summary-секций (совпадают с тем, что видит пользователь в отчётах)
+const summaryTypeCounts = computed(() => {
+  const internal = summaries.value.find(s => s.scope === 'internal')
+  const external = summaries.value.find(s => s.scope === 'external')
+  const internalTotal = internal ? (parseSummaryContent(internal.content)?.total_calls ?? null) : null
+  const externalTotal = external ? (parseSummaryContent(external.content)?.total_calls ?? null) : null
+  return { internal: internalTotal, external: externalTotal }
+})
+
 const modalVisible = ref(false)
 const modalTitle = ref('')
 const modalCallIds = ref<string[]>([])
@@ -269,17 +278,14 @@ function openCallsModal(title: string, callIds: string[]) {
           <p class="text-xs text-gray-500 text-center">{{ progressPercent() }}%</p>
         </div>
 
-        <div v-if="batch.callTypeStats" class="flex gap-4 text-sm">
-          <div v-if="batch.callTypeStats.internal" class="flex items-center gap-1.5">
+        <div class="flex gap-4 text-sm">
+          <div v-if="summaryTypeCounts.internal ?? batch.callTypeStats?.internal" class="flex items-center gap-1.5">
             <Building class="w-4 h-4 text-blue-500" />
-            <span class="text-gray-700">Внутренние: {{ batch.callTypeStats.internal }}</span>
+            <span class="text-gray-700">Внутренние: {{ summaryTypeCounts.internal ?? batch.callTypeStats?.internal }}</span>
           </div>
-          <div v-if="batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing" class="flex items-center gap-1.5">
+          <div v-if="summaryTypeCounts.external ?? (batch.callTypeStats && batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing)" class="flex items-center gap-1.5">
             <Phone class="w-4 h-4 text-purple-500" />
-            <span class="text-gray-700">Внешние: {{ batch.callTypeStats.externalIncoming + batch.callTypeStats.externalOutgoing }}</span>
-          </div>
-          <div v-if="batch.callTypeStats.unknown" class="flex items-center gap-1.5">
-            <span class="text-gray-400">Неизвестные: {{ batch.callTypeStats.unknown }}</span>
+            <span class="text-gray-700">Внешние: {{ summaryTypeCounts.external ?? (batch.callTypeStats!.externalIncoming + batch.callTypeStats!.externalOutgoing) }}</span>
           </div>
         </div>
       </div>
