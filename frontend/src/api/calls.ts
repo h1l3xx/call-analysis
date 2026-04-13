@@ -14,7 +14,7 @@ export const callsApi = {
   departments() {
     return client.get<{ id: string; name: string }[]>('/api/v1/calls/departments')
   },
-  stats(params: { since?: number; until?: number } = {}) {
+  stats(params: { since?: number; until?: number; managerId?: string } = {}) {
     return client.get<{ total: number; processing: number; done: number; failed: number; noSpeech: number; avgScore: number }>('/api/v1/calls/stats', { params })
   },
   get(id: string) {

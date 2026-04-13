@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['CLIENT_ADMIN', 'TEAM_LEAD', 'MANAGER'] },
     },
     {
+      path: '/managers/:id',
+      name: 'manager-detail',
+      component: () => import('@/pages/managers/ManagerDetailPage.vue'),
+      meta: { requiresAuth: true, roles: ['CLIENT_ADMIN', 'TEAM_LEAD'] },
+    },
+    {
       path: '/batches',
       name: 'batches',
       component: () => import('@/pages/batches/BatchesListPage.vue'),

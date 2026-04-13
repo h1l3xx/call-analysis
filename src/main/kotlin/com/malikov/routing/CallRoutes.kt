@@ -192,9 +192,14 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
         // ── Статистика по статусам ──
         get("/stats") {
             val p = requireTenantRole(Role.MANAGER, Role.TEAM_LEAD, Role.CLIENT_ADMIN)
-            val managerId = if (p.roleEnum == Role.MANAGER) {
-                service.getManagerIdByUserId(p.schema!!, UUID.fromString(p.userId))
-            } else null
+            val managerId = when {
+                p.roleEnum == Role.MANAGER ->
+                    service.getManagerIdByUserId(p.schema!!, UUID.fromString(p.userId))
+                else ->
+                    call.parameters["managerId"]?.let {
+                        runCatching { UUID.fromString(it) }.getOrNull()
+                    }
+            }
             val since = call.parameters["since"]?.toLongOrNull()
             val until = call.parameters["until"]?.toLongOrNull()
             call.respond(service.getStats(p.schema!!, managerId, since, until))

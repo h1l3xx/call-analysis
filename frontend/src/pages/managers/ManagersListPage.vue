@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { ChevronLeft, ChevronRight, Phone, Plus, Trash2, Star, Loader2 } from 'lucide-vue-next'
 import { managersApi } from '@/api'
 import type { AddPhoneRequest, ManagerPhoneResponse, ManagerResponse } from '@/types'
@@ -118,7 +119,14 @@ onMounted(fetchManagers)
           </tr>
           <template v-for="m in managers" :key="m.id">
             <tr class="hover:bg-gray-50 transition-colors">
-              <td class="px-5 py-3 font-medium text-gray-900">{{ m.fullName }}</td>
+              <td class="px-5 py-3 font-medium text-gray-900">
+                <RouterLink
+                  v-if="!auth.isManager"
+                  :to="`/managers/${m.id}`"
+                  class="hover:text-primary-600 hover:underline transition-colors"
+                >{{ m.fullName }}</RouterLink>
+                <span v-else>{{ m.fullName }}</span>
+              </td>
               <td class="px-5 py-3 text-gray-600">{{ m.email }}</td>
               <td class="px-5 py-3 text-gray-600">{{ m.departmentName || '—' }}</td>
 
