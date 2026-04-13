@@ -96,7 +96,7 @@ onMounted(fetchManagers)
 <template>
   <div class="space-y-5">
     <h1 class="text-2xl font-bold text-gray-900">
-      {{ auth.isManager ? 'Мой профиль' : 'Менеджеры' }}
+      {{ auth.isManager ? 'Мой профиль' : 'Сотрудники' }}
     </h1>
 
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">

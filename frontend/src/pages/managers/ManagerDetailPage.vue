@@ -105,6 +105,21 @@ async function fetchCalls() {
 onMounted(() => { fetchManager(); fetchStats(); fetchCalls() })
 watch(periodMs, fetchStats)
 
+function callLabel(c: CallResponse): string {
+  const parts: string[] = []
+  if (c.managerName) parts.push(c.managerName)
+  if (c.secondManagerName) parts.push(c.secondManagerName)
+  else if (c.participantNames?.length) parts.push(...c.participantNames.slice(0, 2))
+  if (parts.length >= 2) return parts.join(' → ')
+  if (parts.length === 1) {
+    const dir = c.callDirection
+    if (dir === 'internal_incoming' || dir === 'external_incoming') return `← ${parts[0]}`
+    if (dir === 'internal_outgoing' || dir === 'external_outgoing') return `→ ${parts[0]}`
+    return parts[0]
+  }
+  return c.id.slice(0, 8)
+}
+
 function formatPhone(p: string) {
   if (p.length === 11 && p.startsWith('7'))
     return `+7 (${p.slice(1,4)}) ${p.slice(4,7)}-${p.slice(7,9)}-${p.slice(9)}`
@@ -250,7 +265,9 @@ function formatPhone(p: string) {
                   {{ c.callType === 'internal' ? 'Внутренний' : 'Внешний' }}
                 </span>
               </div>
-              <p class="text-sm text-gray-700 truncate">{{ c.source || c.id }}</p>
+              <p class="text-sm text-gray-700 truncate">
+                {{ callLabel(c) }}
+              </p>
             </div>
             <div class="flex items-center gap-3 shrink-0">
               <span v-if="c.durationSeconds" class="text-xs text-gray-400 flex items-center gap-1">
