@@ -524,8 +524,12 @@ deploy_all() {
   # Build backend JAR via Docker (host network for Maven/Gradle downloads)
   if [[ ! -f "$ROOT_DIR/build/libs/malikov-backend.jar" ]] || [[ -n "$(find "$ROOT_DIR/src" -newer "$ROOT_DIR/build/libs/malikov-backend.jar" 2>/dev/null | head -1)" ]]; then
     log_info "Building backend JAR (Gradle via Docker) ..."
+    # Mount host Gradle cache so wrapper distribution is not re-downloaded on each deploy
+    GRADLE_CACHE_DIR="${GRADLE_USER_HOME:-$HOME/.gradle}"
+    mkdir -p "$GRADLE_CACHE_DIR"
     docker run --rm --network=host \
       -v "$ROOT_DIR":/build -w /build \
+      -v "$GRADLE_CACHE_DIR":/root/.gradle \
       eclipse-temurin:21-jdk-alpine \
       sh -c "chmod +x gradlew && ./gradlew --no-daemon buildFatJar"
     log_ok "Backend JAR built."
@@ -597,8 +601,11 @@ case "${1:-deploy}" in
     if [[ -z "$local_service" || "$local_service" == "app" ]]; then
       if [[ ! -f "$ROOT_DIR/build/libs/malikov-backend.jar" ]] || [[ -n "$(find "$ROOT_DIR/src" -newer "$ROOT_DIR/build/libs/malikov-backend.jar" 2>/dev/null | head -1)" ]]; then
         log_info "Building backend JAR (Gradle via Docker) ..."
+        GRADLE_CACHE_DIR="${GRADLE_USER_HOME:-$HOME/.gradle}"
+        mkdir -p "$GRADLE_CACHE_DIR"
         docker run --rm --network=host \
           -v "$ROOT_DIR":/build -w /build \
+          -v "$GRADLE_CACHE_DIR":/root/.gradle \
           eclipse-temurin:21-jdk-alpine \
           sh -c "chmod +x gradlew && ./gradlew --no-daemon buildFatJar"
         log_ok "Backend JAR built."
