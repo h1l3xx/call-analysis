@@ -1,6 +1,7 @@
 package com.malikov.db
 
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 
@@ -187,6 +188,29 @@ class CallRepository {
         cl.selectAll()
             .where { (cl.finishedAt lessEq olderThanMs) and (cl.audioS3Key.isNotNull()) }
             .map { row -> row[cl.id] to row[cl.audioS3Key]!! }
+    }
+
+    fun getAudioKey(schema: String, callId: UUID): String? = transaction {
+        val cl = TCalls(schema)
+        cl.selectAll().where { cl.id eq callId }
+            .singleOrNull()?.get(cl.audioS3Key)
+    }
+
+    fun listAudioKeysByBatch(schema: String, batchId: UUID): List<Pair<UUID, String>> = transaction {
+        val cl = TCalls(schema)
+        cl.selectAll()
+            .where { (cl.batchId eq batchId) and cl.audioS3Key.isNotNull() }
+            .map { it[cl.id] to it[cl.audioS3Key]!! }
+    }
+
+    fun deleteById(schema: String, callId: UUID): Int = transaction {
+        val cl = TCalls(schema)
+        cl.deleteWhere { cl.id eq callId }
+    }
+
+    fun deleteByBatch(schema: String, batchId: UUID): Int = transaction {
+        val cl = TCalls(schema)
+        cl.deleteWhere { cl.batchId eq batchId }
     }
 
     fun findResultsByBatch(

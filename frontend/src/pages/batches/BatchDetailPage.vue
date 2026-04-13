@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
-import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-vue-next'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight, ChevronDown, Trash2 } from 'lucide-vue-next'
 import { batchesApi, callsApi, managersApi } from '@/api'
 import type { BatchResponse, BatchSummaryResponse, CallResponse, ManagerResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
@@ -11,6 +11,7 @@ import MultiSelect from '@/components/ui/MultiSelect.vue'
 import type { SelectOption } from '@/components/ui/MultiSelect.vue'
 
 const route = useRoute()
+const router = useRouter()
 const { formatDate, formatDuration, participantLabel } = useFormatters()
 
 const batch = ref<BatchResponse | null>(null)
@@ -20,6 +21,7 @@ const loading = ref(true)
 const callsLoading = ref(false)
 const summarizing = ref(false)
 const exporting = ref(false)
+const deleting = ref(false)
 const exportModalOpen = ref(false)
 const departments = ref<{ id: string; name: string }[]>([])
 const allManagers = ref<ManagerResponse[]>([])
@@ -99,6 +101,17 @@ async function exportAll() {
     await batchesApi.exportCsv(batchId.value)
   } finally {
     exporting.value = false
+  }
+}
+
+async function deleteBatch() {
+  if (!confirm('Удалить батч и все его звонки? Это действие необратимо.')) return
+  deleting.value = true
+  try {
+    await batchesApi.delete(batchId.value)
+    router.push('/batches')
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -234,6 +247,15 @@ function openCallsModal(title: string, callIds: string[]) {
               </button>
             </div>
             <span>{{ batch.processedCalls }}/{{ batch.totalCalls }} звонков</span>
+            <button
+              :disabled="deleting"
+              class="flex items-center gap-1.5 px-3 py-1.5 text-red-500 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+              title="Удалить батч"
+              @click="deleteBatch"
+            >
+              <Trash2 class="w-3.5 h-3.5" />
+              Удалить
+            </button>
           </div>
         </div>
 

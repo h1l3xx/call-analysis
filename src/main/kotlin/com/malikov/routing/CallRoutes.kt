@@ -22,7 +22,7 @@ private val log = LoggerFactory.getLogger("CallRoutes")
 
 private val ALLOWED_AUDIO_EXTENSIONS = setOf("wav", "mp3", "ogg", "flac", "m4a", "webm", "opus")
 private const val MAX_AUDIO_SIZE_BYTES = 100L * 1024 * 1024  // 100 MB
-private const val MAX_BULK_FILES = 500
+private const val MAX_BULK_FILES = 2000
 
 fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, batchExportService: BatchExportService) {
     route("/calls") {
@@ -117,8 +117,14 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
         }
 
         // ── Массовая загрузка: авто-классификация, без scriptId ──
+        // Query params: batchId (optional UUID) — append to existing batch
+        //               final   (optional bool)  — last chunk, start processing; default true
         post("/bulk-upload") {
             val p = requireTenantRole(Role.CLIENT_ADMIN)
+
+            val existingBatchId = call.request.queryParameters["batchId"]
+                ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            val isFinal = call.request.queryParameters["final"]?.lowercase() != "false"
 
             val audioFiles = mutableListOf<Pair<File, String>>()
 
@@ -154,8 +160,10 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
                 require(audioFiles.isNotEmpty()) { "At least one audio file is required" }
 
                 val result = service.createBulkWithAudio(
-                    schema = p.schema!!,
-                    files  = audioFiles,
+                    schema          = p.schema!!,
+                    files           = audioFiles,
+                    existingBatchId = existingBatchId,
+                    isFinal         = isFinal,
                 )
 
                 call.respond(HttpStatusCode.OK, result)
@@ -253,6 +261,14 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
             }
 
             call.respond(detail)
+        }
+
+        // ── Удаление звонка (только CLIENT_ADMIN) ──
+        delete("/{id}") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val callId = pathUuid("id")
+            service.deleteCall(p.schema!!, callId)
+            call.respond(HttpStatusCode.NoContent)
         }
 
         // ── Результат анализа ──

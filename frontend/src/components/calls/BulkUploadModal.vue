@@ -5,6 +5,8 @@ import { callsApi } from '@/api'
 import type { BulkUploadItemResult } from '@/types'
 import { useRouter } from 'vue-router'
 
+const CHUNK_SIZE = 200
+
 const emit = defineEmits<{ close: []; uploaded: [batchId: string] }>()
 const router = useRouter()
 
@@ -15,6 +17,7 @@ const error = ref('')
 const dragOver = ref(false)
 const results = ref<BulkUploadItemResult[] | null>(null)
 const resultSummary = ref<{ batchId: string; total: number; queued: number; failed: number } | null>(null)
+const chunkStatus = ref('')
 
 const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'm4a', 'webm', 'opus']
 
@@ -79,18 +82,57 @@ async function handleUpload() {
   progress.value = 0
   results.value = null
   resultSummary.value = null
+  chunkStatus.value = ''
+
+  const allFiles = files.value
+  const chunks: File[][] = []
+  for (let i = 0; i < allFiles.length; i += CHUNK_SIZE) {
+    chunks.push(allFiles.slice(i, i + CHUNK_SIZE))
+  }
+
+  const allItems: BulkUploadItemResult[] = []
+  let batchId = ''
+  let totalQueued = 0
+  let totalFailed = 0
 
   try {
-    const { data } = await callsApi.bulkUpload(files.value, (pct) => {
-      progress.value = pct
-    })
-    results.value = data.items
-    resultSummary.value = { batchId: data.batchId, total: data.total, queued: data.queued, failed: data.failed }
-    emit('uploaded', data.batchId)
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      const isLast = i === chunks.length - 1
+      const chunkBase = Math.round((i / chunks.length) * 100)
+
+      if (chunks.length > 1) {
+        chunkStatus.value = `Чанк ${i + 1} из ${chunks.length}`
+      }
+
+      const { data } = await callsApi.bulkUpload(chunk, {
+        batchId: batchId || undefined,
+        final: isLast,
+        onProgress: (pct) => {
+          progress.value = chunkBase + Math.round((pct / chunks.length))
+        },
+      })
+
+      if (!batchId) batchId = data.batchId
+      allItems.push(...data.items)
+      totalQueued += data.queued
+      totalFailed += data.failed
+    }
+
+    results.value = allItems
+    resultSummary.value = {
+      batchId,
+      total: allFiles.length,
+      queued: totalQueued,
+      failed: totalFailed,
+    }
+    progress.value = 100
+    emit('uploaded', batchId)
   } catch (e: any) {
     error.value = e.response?.data?.error || 'Ошибка загрузки'
   } finally {
     loading.value = false
+    chunkStatus.value = ''
   }
 }
 
@@ -185,7 +227,7 @@ function goToBatch() {
             <input ref="fileInput" type="file" accept="audio/*" multiple class="hidden" @change="handleFileSelect" />
             <FolderUp class="w-10 h-10 text-gray-400 mx-auto mb-3" />
             <p class="text-sm text-gray-600 font-medium">Перетащите аудиофайлы сюда или нажмите для выбора</p>
-            <p class="text-xs text-gray-400 mt-1.5">WAV, MP3, OGG, FLAC — до 100 MB каждый, до 500 файлов</p>
+            <p class="text-xs text-gray-400 mt-1.5">WAV, MP3, OGG, FLAC — до 100 MB каждый · автоматическая разбивка на чанки по {{ CHUNK_SIZE }} файлов</p>
             <p class="text-xs text-gray-400 mt-2 font-medium">Тип звонка определяется автоматически:</p>
             <p class="text-xs text-gray-400 mt-0.5">
               <span class="inline-block px-1 py-0.5 rounded bg-purple-50 text-purple-600 font-medium">Внешний</span>
@@ -230,7 +272,9 @@ function goToBatch() {
             <div class="w-full bg-gray-200 rounded-full h-2">
               <div class="bg-primary-600 h-2 rounded-full transition-all" :style="{ width: `${progress}%` }" />
             </div>
-            <p class="text-xs text-gray-500 text-center">Загрузка файлов: {{ progress }}%</p>
+            <p class="text-xs text-gray-500 text-center">
+              {{ chunkStatus ? `${chunkStatus} · ` : '' }}Загрузка файлов: {{ progress }}%
+            </p>
           </div>
 
           <button

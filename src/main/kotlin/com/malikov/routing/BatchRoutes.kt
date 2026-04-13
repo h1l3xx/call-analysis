@@ -8,6 +8,7 @@ import com.malikov.db.ManagerRepository
 import com.malikov.dto.*
 import com.malikov.service.BatchExportService
 import com.malikov.service.BatchSummaryService
+import com.malikov.service.CallService
 import com.malikov.service.PhoneParser
 import io.ktor.http.*
 import io.ktor.server.application.call
@@ -23,6 +24,7 @@ fun Route.batchRoutes(
     managerRepo: ManagerRepository,
     batchSummaryService: BatchSummaryService,
     batchExportService: BatchExportService,
+    callService: CallService,
 ) {
     val json = Json { ignoreUnknownKeys = true }
 
@@ -130,6 +132,15 @@ fun Route.batchRoutes(
                     createdAt = it.createdAt,
                 )
             })
+        }
+
+        delete("/{id}") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val batchId = pathUuid("id")
+            batchRepo.findById(p.schema!!, batchId)
+                ?: throw NotFoundException("Batch not found")
+            callService.deleteBatch(p.schema!!, batchId)
+            call.respond(HttpStatusCode.NoContent)
         }
 
         post("/{id}/summarize") {

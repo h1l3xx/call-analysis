@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Package, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Package, ChevronLeft, ChevronRight, Trash2 } from 'lucide-vue-next'
 import { batchesApi } from '@/api'
 import type { BatchResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
@@ -13,6 +13,7 @@ const loading = ref(true)
 const page = ref(1)
 const totalPages = ref(1)
 const total = ref(0)
+const deletingId = ref<string | null>(null)
 
 async function fetchBatches() {
   loading.value = true
@@ -23,6 +24,18 @@ async function fetchBatches() {
     total.value = data.total
   } finally {
     loading.value = false
+  }
+}
+
+async function deleteBatch(id: string, e: Event) {
+  e.stopPropagation()
+  if (!confirm('Удалить батч и все его звонки? Это действие необратимо.')) return
+  deletingId.value = id
+  try {
+    await batchesApi.delete(id)
+    await fetchBatches()
+  } finally {
+    deletingId.value = null
   }
 }
 
@@ -75,11 +88,12 @@ function progressPercent(b: BatchResponse): number {
             <th class="text-left px-5 py-3 font-medium text-gray-600">Звонки</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Типы</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Дата</th>
+            <th class="px-5 py-3"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           <tr v-if="!batches.length">
-            <td colspan="5" class="px-5 py-12 text-center text-gray-400">Нет батчей</td>
+            <td colspan="6" class="px-5 py-12 text-center text-gray-400">Нет батчей</td>
           </tr>
           <RouterLink
             v-for="batch in batches"
@@ -118,6 +132,16 @@ function progressPercent(b: BatchResponse): number {
                 </div>
               </td>
               <td class="px-5 py-3 text-gray-500">{{ formatDate(batch.createdAt) }}</td>
+              <td class="px-3 py-3 text-right">
+                <button
+                  :disabled="deletingId === batch.id"
+                  class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                  title="Удалить батч"
+                  @click="deleteBatch(batch.id, $event)"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </td>
             </tr>
           </RouterLink>
         </tbody>

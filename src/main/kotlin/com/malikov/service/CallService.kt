@@ -124,9 +124,25 @@ class CallService(
      * Создаёт батч, определяет менеджера и тип звонка из имени файла,
      * запускает двухфазную обработку через BatchProcessingService.
      */
+    fun deleteBatch(schema: String, batchId: UUID) {
+        val audioKeys = callRepo.listAudioKeysByBatch(schema, batchId)
+        audioKeys.forEach { (_, key) -> audioStorage.delete(key) }
+        batchRepo.deleteById(schema, batchId)
+        log.info("Deleted batch {} and {} audio files (schema={})", batchId, audioKeys.size, schema)
+    }
+
+    fun deleteCall(schema: String, callId: UUID) {
+        val key = callRepo.getAudioKey(schema, callId)
+        callRepo.deleteById(schema, callId)
+        key?.let { audioStorage.delete(it) }
+        log.info("Deleted call {} (schema={})", callId, schema)
+    }
+
     fun createBulkWithAudio(
         schema: String,
         files: List<Pair<File, String>>,
+        existingBatchId: UUID? = null,
+        isFinal: Boolean = true,
     ): BulkUploadResponse {
         var intCount = 0; var extInCount = 0; var extOutCount = 0; var unkCount = 0
 
@@ -176,7 +192,14 @@ class CallService(
 
         val actualTotal = deduped.size
         val typeStats = CallTypeStatsJson(intCount, extInCount, extOutCount, unkCount)
-        val batchId = batchRepo.create(schema, actualTotal, typeStats)
+
+        // Use existing batch or create a new one
+        val batchId = if (existingBatchId != null) {
+            batchRepo.addToTotalCalls(schema, existingBatchId, actualTotal)
+            existingBatchId
+        } else {
+            batchRepo.create(schema, actualTotal, typeStats)
+        }
 
         val results = mutableListOf<BulkUploadItemResult>()
         var queued = 0; var failed = 0
@@ -218,15 +241,21 @@ class CallService(
                 )
 
                 val ext = p.filename.substringAfterLast('.', "wav").lowercase()
+                var persistentFile: File? = null
                 try {
                     val audioKey = audioStorage.save(schema, callId, ext, p.audioFile)
                     callRepo.updateAudioKey(schema, callId, audioKey)
+                    persistentFile = audioStorage.getFile(audioKey)
                 } catch (e: Exception) {
                     log.error("Failed to save audio for call {} (schema={}): {}", callId, schema, e.message, e)
+                } finally {
+                    p.audioFile.delete()
                 }
 
-                queuedCallIds.add(callId)
-                queuedFiles.add(p.audioFile)
+                if (persistentFile != null) {
+                    queuedCallIds.add(callId)
+                    queuedFiles.add(persistentFile)
+                }
                 queued++
                 results.add(BulkUploadItemResult(
                     filename = p.filename, status = "queued",
@@ -246,14 +275,24 @@ class CallService(
             }
         }
 
-        if (queued != actualTotal) {
+        if (existingBatchId == null && queued != actualTotal) {
             batchRepo.updateTotalCalls(schema, batchId, queued)
         }
 
-        batchProcessingService.startBatchProcessing(
-            schema = schema, batchId = batchId,
-            callFiles = queuedCallIds.zip(queuedFiles),
-        )
+        if (isFinal) {
+            // For the final (or only) chunk collect ALL files saved for this batch from storage
+            val allCallFiles = if (existingBatchId != null) {
+                callRepo.listAudioKeysByBatch(schema, batchId).mapNotNull { (callId, key) ->
+                    audioStorage.getFile(key)?.let { callId to it }
+                }
+            } else {
+                queuedCallIds.zip(queuedFiles)
+            }
+            batchProcessingService.startBatchProcessing(
+                schema = schema, batchId = batchId,
+                callFiles = allCallFiles,
+            )
+        }
 
         return BulkUploadResponse(
             batchId = batchId.toString(), total = files.size,

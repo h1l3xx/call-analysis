@@ -65,17 +65,33 @@ export const callsApi = {
     window.URL.revokeObjectURL(url)
   },
 
-  bulkUpload(files: File[], onProgress?: (pct: number) => void) {
+  bulkUpload(
+    files: File[],
+    options?: {
+      batchId?: string
+      final?: boolean
+      onProgress?: (pct: number) => void
+    },
+  ) {
     const form = new FormData()
     for (const file of files) {
       form.append('files', file)
     }
+    const params: Record<string, string> = {}
+    if (options?.batchId) params.batchId = options.batchId
+    if (options?.final === false) params.final = 'false'
     return client.post<BulkUploadResponse>('/api/v1/calls/bulk-upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      params,
       timeout: 0,
       onUploadProgress: (e) => {
-        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+        if (options?.onProgress && e.total)
+          options.onProgress(Math.round((e.loaded / e.total) * 100))
       },
     })
+  },
+
+  delete(id: string) {
+    return client.delete(`/api/v1/calls/${id}`)
   },
 }

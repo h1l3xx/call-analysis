@@ -45,4 +45,7 @@ export const batchesApi = {
       sinceMs, untilMs, departmentId,
     })
   },
+  delete(id: string) {
+    return client.delete(`/api/v1/batches/${id}`)
+  },
 }

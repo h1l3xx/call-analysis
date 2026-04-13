@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, RefreshCw } from 'lucide-vue-next'
+import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-vue-next'
 import { callsApi } from '@/api'
 import type { CallDetailResponse, CallResultResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
@@ -18,6 +18,7 @@ const { formatDate, formatDuration, participantLabel } = useFormatters()
 const call = ref<CallDetailResponse | null>(null)
 const result = ref<CallResultResponse | null>(null)
 const loading = ref(true)
+const deleting = ref(false)
 const activeTab = ref<'transcription' | 'metrics' | 'quality'>('transcription')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -66,6 +67,18 @@ onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })
 
+async function deleteCall() {
+  if (!call.value) return
+  if (!confirm('Удалить этот звонок? Это действие необратимо.')) return
+  deleting.value = true
+  try {
+    await callsApi.delete(call.value.id)
+    router.back()
+  } finally {
+    deleting.value = false
+  }
+}
+
 const tabs = [
   { key: 'transcription', label: 'Транскрипция' },
   { key: 'metrics', label: 'Метрики спикеров' },
@@ -79,7 +92,17 @@ const tabs = [
       <button @click="router.back()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
         <ArrowLeft class="w-5 h-5" />
       </button>
-      <h1 class="text-2xl font-bold text-gray-900">Детали звонка</h1>
+      <h1 class="text-2xl font-bold text-gray-900 flex-1">Детали звонка</h1>
+      <button
+        v-if="call"
+        :disabled="deleting"
+        class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+        title="Удалить звонок"
+        @click="deleteCall"
+      >
+        <Trash2 class="w-3.5 h-3.5" />
+        Удалить
+      </button>
     </div>
 
     <div v-if="loading" class="text-center py-12 text-gray-400">Загрузка...</div>
