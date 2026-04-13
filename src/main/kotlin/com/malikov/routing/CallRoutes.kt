@@ -151,8 +151,8 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
                                         }
                                     }
                                     val size = tempFile.length()
-                                    if (size < MIN_AUDIO_SIZE_BYTES || size > MAX_AUDIO_SIZE_BYTES) {
-                                        log.warn("Skipping file {} — size {} bytes is outside valid range", origName, size)
+                                    if (size > MAX_AUDIO_SIZE_BYTES) {
+                                        log.warn("Skipping file {} — size {} bytes exceeds max", origName, size)
                                         tempFile.delete()
                                     } else {
                                         audioFiles.add(tempFile to origName)

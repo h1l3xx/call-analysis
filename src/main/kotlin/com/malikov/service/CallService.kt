@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
 
+private const val MIN_VALID_AUDIO_BYTES = 1024L  // < 1 KB → пустая запись звонка
+
 class CallService(
     private val callRepo: CallRepository,
     private val managerRepo: ManagerRepository,
@@ -239,6 +241,22 @@ class CallService(
                     callDirection = p.callDirection,
                     secondManagerId = p.secondManager?.id,
                 )
+
+                val fileSizeBytes = p.audioFile.length()
+                if (fileSizeBytes < MIN_VALID_AUDIO_BYTES) {
+                    val reason = "Пустая запись звонка ($fileSizeBytes байт) — разговор не состоялся или файл повреждён"
+                    callRepo.markNoSpeech(schema, callId, reason)
+                    p.audioFile.delete()
+                    log.warn("Call {} marked no_speech: file too small ({} bytes), filename={}", callId, fileSizeBytes, p.filename)
+                    results.add(BulkUploadItemResult(
+                        filename = p.filename, status = "no_speech",
+                        callId = callId.toString(), managerId = p.manager.id.toString(),
+                        managerName = p.manager.fullName, phone = p.matchedId,
+                        callType = p.callTypeStr,
+                        error = reason,
+                    ))
+                    continue
+                }
 
                 val ext = p.filename.substringAfterLast('.', "wav").lowercase()
                 try {

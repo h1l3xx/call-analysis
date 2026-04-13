@@ -203,6 +203,15 @@ class CallRepository {
             .map { it[cl.id] to it[cl.audioS3Key]!! }
     }
 
+    fun markNoSpeech(schema: String, callId: UUID, reason: String) = transaction {
+        val cl = TCalls(schema)
+        cl.update({ cl.id eq callId }) {
+            it[cl.status]       = "no_speech"
+            it[cl.errorMessage] = reason.take(2000)
+            it[cl.finishedAt]   = System.currentTimeMillis()
+        }
+    }
+
     fun deleteById(schema: String, callId: UUID): Int = transaction {
         val cl = TCalls(schema)
         cl.deleteWhere { cl.id eq callId }
