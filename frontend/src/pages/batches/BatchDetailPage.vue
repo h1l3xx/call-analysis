@@ -174,6 +174,7 @@ function startPolling() {
 }
 
 const SCROLL_KEY = computed(() => `batch-scroll-${batchId.value}`)
+const pageVisible = ref(!sessionStorage.getItem(SCROLL_KEY.value))
 
 function saveScroll() {
   sessionStorage.setItem(SCROLL_KEY.value, String(window.scrollY))
@@ -183,7 +184,13 @@ function restoreScroll() {
   const saved = sessionStorage.getItem(SCROLL_KEY.value)
   if (saved) {
     sessionStorage.removeItem(SCROLL_KEY.value)
-    requestAnimationFrame(() => window.scrollTo({ top: Number(saved), behavior: 'instant' }))
+    // Scroll first (page still invisible), then fade in
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: Number(saved), behavior: 'instant' })
+      requestAnimationFrame(() => { pageVisible.value = true })
+    })
+  } else {
+    pageVisible.value = true
   }
 }
 
@@ -266,7 +273,7 @@ function openCallsModal(title: string, callIds: string[]) {
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="space-y-5 transition-opacity duration-300" :class="pageVisible ? 'opacity-100' : 'opacity-0'">
     <div class="flex items-center gap-3">
       <RouterLink to="/batches" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
         <ArrowLeft class="w-5 h-5" />
