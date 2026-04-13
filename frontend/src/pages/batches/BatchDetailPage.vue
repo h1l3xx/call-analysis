@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { ArrowLeft, RefreshCw, Phone, Building, Download, ChevronLeft, ChevronRight, ChevronDown, Trash2 } from 'lucide-vue-next'
 import { batchesApi, callsApi, managersApi } from '@/api'
@@ -27,9 +27,44 @@ const departments = ref<{ id: string; name: string }[]>([])
 const allManagers = ref<ManagerResponse[]>([])
 const exportDepartment = ref('')
 const exportManagers = ref<string[]>([])
-const tab = ref<'all' | 'internal' | 'external'>('all')
-const callsPage = ref(1)
+const tab = ref<'all' | 'internal' | 'external'>(
+  (route.query.tab as 'all' | 'internal' | 'external') || 'all'
+)
+const callsPage = ref(Number(route.query.page) || 1)
 const callsTotalPages = ref(1)
+const pageInput = ref(String(callsPage.value))
+
+function syncQuery() {
+  router.replace({
+    query: {
+      ...route.query,
+      page: callsPage.value > 1 ? String(callsPage.value) : undefined,
+      tab: tab.value !== 'all' ? tab.value : undefined,
+    },
+  })
+}
+
+function goToPage(n: number) {
+  const clamped = Math.max(1, Math.min(n, callsTotalPages.value))
+  callsPage.value = clamped
+  pageInput.value = String(clamped)
+  syncQuery()
+  fetchCalls()
+}
+
+function onPageInputBlur() {
+  const n = parseInt(pageInput.value)
+  if (!isNaN(n)) goToPage(n)
+  else pageInput.value = String(callsPage.value)
+}
+
+function onPageInputKey(e: KeyboardEvent) {
+  if (e.key === 'Enter') (e.target as HTMLElement).blur()
+}
+
+watch(callsTotalPages, () => {
+  pageInput.value = String(callsPage.value)
+})
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
 const managerOptions = computed<SelectOption[]>(() =>
@@ -463,7 +498,7 @@ function openCallsModal(title: string, callIds: string[]) {
             :key="t"
             class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
             :class="tab === t ? 'bg-primary-100 text-primary-700' : 'text-gray-600 hover:bg-gray-100'"
-            @click="tab = t; callsPage = 1; fetchCalls()"
+            @click="tab = t; callsPage = 1; pageInput = '1'; syncQuery(); fetchCalls()"
           >
             {{ t === 'all' ? 'Все звонки' : t === 'internal' ? 'Внутренние' : 'Внешние' }}
           </button>
@@ -519,15 +554,25 @@ function openCallsModal(title: string, callIds: string[]) {
           <button
             :disabled="callsPage <= 1"
             class="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            @click="callsPage--; fetchCalls()"
+            @click="goToPage(callsPage - 1)"
           >
             <ChevronLeft class="w-4 h-4" />
           </button>
-          <span class="text-sm text-gray-600">{{ callsPage }} / {{ callsTotalPages }}</span>
+          <div class="flex items-center gap-1.5 text-sm text-gray-600">
+            <input
+              v-model="pageInput"
+              type="text"
+              inputmode="numeric"
+              class="w-12 text-center border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+              @blur="onPageInputBlur"
+              @keydown="onPageInputKey"
+            />
+            <span class="text-gray-400">/ {{ callsTotalPages }}</span>
+          </div>
           <button
             :disabled="callsPage >= callsTotalPages"
             class="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            @click="callsPage++; fetchCalls()"
+            @click="goToPage(callsPage + 1)"
           >
             <ChevronRight class="w-4 h-4" />
           </button>
