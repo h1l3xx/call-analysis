@@ -338,7 +338,7 @@ function openCallsModal(title: string, callIds: string[]) {
                     @click="issue.call_ids?.length && openCallsModal(issue.issue, issue.call_ids)">
                     <span class="mt-1 w-2 h-2 rounded-full shrink-0"
                       :class="issue.severity === 'high' ? 'bg-red-500' : issue.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'" />
-                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="ml-1" :class="issue.call_ids?.length ? 'text-primary-500 underline decoration-dotted' : 'text-gray-400'">({{ issue.frequency }} зв.)</span></span>
+                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.call_ids?.length" class="ml-1 text-primary-500 underline decoration-dotted">({{ issue.call_ids.length }} зв.)</span></span>
                   </div>
                 </div>
               </div>
@@ -353,7 +353,7 @@ function openCallsModal(title: string, callIds: string[]) {
                     @click="issue.call_ids?.length && openCallsModal(issue.issue, issue.call_ids)">
                     <span class="mt-1 w-2 h-2 rounded-full shrink-0"
                       :class="issue.severity === 'high' ? 'bg-red-500' : issue.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'" />
-                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.frequency" class="ml-1" :class="issue.call_ids?.length ? 'text-primary-500 underline decoration-dotted' : 'text-gray-400'">({{ issue.frequency }} зв.)</span></span>
+                    <span class="text-gray-700">{{ issue.issue }}<span v-if="issue.call_ids?.length" class="ml-1 text-primary-500 underline decoration-dotted">({{ issue.call_ids.length }} зв.)</span></span>
                   </div>
                 </div>
               </div>

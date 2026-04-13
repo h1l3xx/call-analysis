@@ -202,35 +202,67 @@ class BatchSummaryService(
         return callLlm(prompt)
     }
 
-    private fun buildInternalSummaryPrompt(calls: List<CallEvalData>): String {
-        val callSummaries = calls.take(50).joinToString("\n\n") { call ->
-            """
-Звонок ID: ${call.callId}
-Файл: ${call.filename ?: "N/A"}
-Менеджер: ${call.managerName ?: "Неизвестен"}
-Описание: ${call.summary ?: "N/A"}
-Оценка: ${call.overallScore ?: "N/A"}
-Сильные стороны: ${call.strengths ?: "N/A"}
-Слабые стороны: ${call.weaknesses ?: "N/A"}
-""".trimIndent()
+    /**
+     * Extracts weakness strings from the stored JSONB weaknesses field.
+     * Handles JSON arrays of strings or arrays of objects with a text/name/description key.
+     */
+    private fun extractWeaknessStrings(weaknessesJson: String?): List<String> {
+        if (weaknessesJson.isNullOrBlank()) return emptyList()
+        return try {
+            when (val el = Json.parseToJsonElement(weaknessesJson)) {
+                is kotlinx.serialization.json.JsonArray -> el.mapNotNull { item ->
+                    when {
+                        item is kotlinx.serialization.json.JsonPrimitive -> item.content
+                        item is kotlinx.serialization.json.JsonObject ->
+                            listOf("text", "name", "description")
+                                .firstNotNullOfOrNull { key ->
+                                    (item[key] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                                }
+                        else -> null
+                    }
+                }
+                else -> emptyList()
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
+    }
+
+    /**
+     * Compact one-line representation of a call for LLM input.
+     * Format: [shortId] score=X manager | weakness1; weakness2
+     * Keeps token count low so ALL calls fit in a single prompt.
+     */
+    private fun compactCallLine(call: CallEvalData, managers: String): String {
+        val shortId = call.callId.take(8)
+        val score = call.overallScore?.let { Math.round(it).toString() } ?: "?"
+        val weaknesses = extractWeaknessStrings(call.weaknesses)
+            .joinToString("; ") { it.take(120) }
+            .ifEmpty { "—" }
+        return "[$shortId] score=$score ${managers.take(40)} | $weaknesses"
+    }
+
+    private fun buildInternalSummaryPrompt(calls: List<CallEvalData>): String {
+        val avgScore = calls.mapNotNull { it.overallScore }.average().let { if (it.isNaN()) 0.0 else it }
+        val callLines = calls.joinToString("\n") { compactCallLine(it, it.managerName ?: "?") }
 
         return """
 Проанализируй результаты оценки ${calls.size} ВНУТРЕННИХ звонков компании.
+Средний балл: ${"%.1f".format(avgScore)}
 
-Данные по каждому звонку:
-$callSummaries
+Список всех звонков (формат: [ID] score=балл менеджер | недостатки через точку с запятой):
+$callLines
 
-Сформируй АГРЕГИРОВАННЫЙ отчёт. Ответ СТРОГО в JSON формате.
-ВАЖНО: В каждой проблеме (issue) укажи массив "call_ids" — список ID звонков, в которых встречается эта проблема.
+Сгруппируй недостатки в типичные проблемы. Для каждой проблемы укажи ТОЧНЫЙ массив "call_ids" из приведённых ID (первые 8 символов UUID).
+Ответ СТРОГО в JSON формате:
 {
   "total_calls": ${calls.size},
-  "avg_score": <средний балл>,
+  "avg_score": ${"%.1f".format(avgScore)},
   "business_process_issues": [
-    {"issue": "<описание узкого места>", "frequency": <кол-во звонков>, "severity": "high/medium/low", "call_ids": ["<ID звонка>", ...]}
+    {"issue": "<описание узкого места>", "severity": "high/medium/low", "call_ids": ["<8-символьный ID>", ...]}
   ],
   "communication_issues": [
-    {"issue": "<описание проблемы>", "frequency": <кол-во звонков>, "severity": "high/medium/low", "call_ids": ["<ID звонка>", ...]}
+    {"issue": "<описание проблемы коммуникации>", "severity": "high/medium/low", "call_ids": ["<8-символьный ID>", ...]}
   ],
   "recurring_patterns": ["повторяющийся паттерн 1", ...],
   "top_recommendations": ["рекомендация 1", ...],
@@ -240,37 +272,31 @@ $callSummaries
     }
 
     private fun buildExternalSummaryPrompt(calls: List<CallEvalData>): String {
-        val callSummaries = calls.take(50).joinToString("\n\n") { call ->
+        val avgScore = calls.mapNotNull { it.overallScore }.average().let { if (it.isNaN()) 0.0 else it }
+        val callLines = calls.joinToString("\n") { call ->
             val managers = listOfNotNull(call.managerName, call.secondManagerName)
-                .joinToString(" / ").ifEmpty { "Неизвестен" }
-            """
-Звонок ID: ${call.callId}
-Файл: ${call.filename ?: "N/A"}
-Менеджеры: $managers
-Описание: ${call.summary ?: "N/A"}
-Оценка: ${call.overallScore ?: "N/A"}
-Сильные стороны: ${call.strengths ?: "N/A"}
-Слабые стороны: ${call.weaknesses ?: "N/A"}
-""".trimIndent()
+                .joinToString("/").ifEmpty { "?" }
+            compactCallLine(call, managers)
         }
 
         return """
 Проанализируй результаты оценки ${calls.size} ВНЕШНИХ звонков менеджеров с клиентами.
-ВАЖНО: Один номер телефона могут использовать несколько сотрудников — в поле "Менеджеры" через " / " указаны все участники. Учитывай звонок в статистике каждого из указанных менеджеров.
+ВАЖНО: Один номер телефона могут использовать несколько сотрудников — они перечислены через "/". Учитывай звонок в статистике каждого менеджера.
+Средний балл: ${"%.1f".format(avgScore)}
 
-Данные по каждому звонку:
-$callSummaries
+Список всех звонков (формат: [ID] score=балл менеджер(ы) | недостатки):
+$callLines
 
-Сформируй АГРЕГИРОВАННЫЙ отчёт. Ответ СТРОГО в JSON формате.
-ВАЖНО: В manager_performance у каждого менеджера укажи массив "call_ids" — список ID звонков этого менеджера. В common_client_complaints каждый элемент — объект с полями "complaint" и "call_ids".
+Сгруппируй данные по менеджерам и по типам жалоб. Для каждого элемента указывай ТОЧНЫЕ ID из приведённого списка.
+Ответ СТРОГО в JSON формате:
 {
   "total_calls": ${calls.size},
-  "avg_score": <средний балл>,
+  "avg_score": ${"%.1f".format(avgScore)},
   "manager_performance": [
-    {"manager": "<имя>", "calls_count": <кол-во>, "avg_score": <средний балл>, "key_issues": ["проблема"], "call_ids": ["<ID звонка>", ...]}
+    {"manager": "<имя>", "calls_count": <кол-во>, "avg_score": <средний балл>, "key_issues": ["проблема"], "call_ids": ["<8-символьный ID>", ...]}
   ],
   "common_client_complaints": [
-    {"complaint": "<жалоба>", "call_ids": ["<ID звонка>", ...]}
+    {"complaint": "<жалоба>", "call_ids": ["<8-символьный ID>", ...]}
   ],
   "script_adherence": {
     "avg_adherence_percent": <процент следования скрипту>,
