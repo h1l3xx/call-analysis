@@ -86,11 +86,15 @@ class BatchRepository {
         }
     }
 
-    /** Пересчитывает callTypeStats из реальных записей звонков (нужно для чанковых загрузок). */
+    /** Пересчитывает callTypeStats из реальных записей звонков (нужно для чанковых загрузок).
+     *  Считаем только "завершённые" звонки (done + transcribed_only + no_speech + failed),
+     *  чтобы цифры совпадали с тем, что LLM-summary видит как total_calls.
+     */
     fun refreshTypeStats(schema: String, batchId: UUID) = transaction {
         val cl = TCalls(schema)
+        val finishedStatuses = listOf("done", "transcribed_only", "no_speech", "failed")
         val rows = cl.select(cl.callType, cl.callType.count())
-            .where { cl.batchId eq batchId }
+            .where { (cl.batchId eq batchId) and (cl.status inList finishedStatuses) }
             .groupBy(cl.callType)
             .associate { it[cl.callType] to it[cl.callType.count()].toInt() }
         val stats = CallTypeStatsJson(
