@@ -489,6 +489,24 @@ class CallRepository {
             .associate { it[m.id] to it[Users.fullName] }
     }
 
+    fun findIdsByManagerAndStatus(
+        schema: String,
+        managerId: UUID,
+        statuses: List<String>,
+        since: Long? = null,
+        until: Long? = null,
+    ): List<UUID> = transaction {
+        val cl = TCalls(schema)
+        val conditions = mutableListOf<Op<Boolean>>(
+            Op.build { cl.managerId eq managerId },
+            Op.build { cl.status inList statuses },
+        )
+        if (since != null) conditions.add(Op.build { cl.createdAt greaterEq since })
+        if (until != null) conditions.add(Op.build { cl.createdAt lessEq until })
+        val where = conditions.reduce { a, b -> a and b }
+        cl.select(cl.id).where(where).map { it[cl.id] }
+    }
+
     fun countByStatus(
         schema: String,
         managerId: UUID? = null,

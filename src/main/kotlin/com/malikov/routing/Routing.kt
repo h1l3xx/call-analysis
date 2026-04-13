@@ -46,7 +46,7 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
             route("/api/v1") {
                 managerRoutes(services.managerService)
                 scriptRoutes(services.scriptService)
-                callRoutes(services.callService, services.audioStorageService, services.batchExportService)
+                callRoutes(services.callService, services.audioStorageService, services.batchExportService, services.batchProcessingService)
                 batchRoutes(services.batchRepository, services.callRepository, services.managerRepository, services.batchSummaryService, services.batchExportService, services.callService)
                 pipelineRoutes(services.pipelineService)
                 telegramRoutes(services.telegramLinkService, config.telegram.linkCodeTtlMin)

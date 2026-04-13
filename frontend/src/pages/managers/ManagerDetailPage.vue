@@ -4,10 +4,10 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
   ArrowLeft, CalendarDays, Phone, Building, Star,
   CheckCircle2, AlertTriangle, VolumeX, Clock, ChevronRight,
+  Download, RotateCcw, Loader2,
 } from 'lucide-vue-next'
 import { managersApi, callsApi } from '@/api'
 import type { ManagerResponse, CallResponse } from '@/types'
-// CallResponse.source used as display label; overallScore available only in CallDetailResponse
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
 
@@ -102,6 +102,40 @@ async function fetchCalls() {
   }
 }
 
+// ── Export ────────────────────────────────────────────────────────────────────
+const exporting = ref(false)
+
+async function exportCalls() {
+  exporting.value = true
+  try {
+    await callsApi.exportCsv({
+      managerIds: managerId.value,
+      sinceMs: periodMs.value.since,
+      untilMs: periodMs.value.until,
+    })
+  } finally {
+    exporting.value = false
+  }
+}
+
+// ── Re-evaluate ───────────────────────────────────────────────────────────────
+const reevaluating = ref(false)
+const reevaluateResult = ref<string | null>(null)
+
+async function reevaluateCalls() {
+  if (!confirm('Отправить звонки сотрудника на повторную оценку LLM за выбранный период?')) return
+  reevaluating.value = true
+  reevaluateResult.value = null
+  try {
+    const { data } = await callsApi.reevaluate(managerId.value, periodMs.value)
+    reevaluateResult.value = `Поставлено в очередь: ${data.queued} звонков`
+  } catch {
+    reevaluateResult.value = 'Ошибка при запуске переоценки'
+  } finally {
+    reevaluating.value = false
+  }
+}
+
 onMounted(() => { fetchManager(); fetchStats(); fetchCalls() })
 watch(periodMs, fetchStats)
 
@@ -165,7 +199,7 @@ function formatPhone(p: string) {
       </div>
     </div>
 
-    <!-- Period selector -->
+    <!-- Period selector + actions -->
     <div class="flex flex-wrap items-center gap-2">
       <div class="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
         <button v-for="p in presets" :key="p.key" @click="selectPreset(p.key)"
@@ -181,6 +215,35 @@ function formatPhone(p: string) {
           showCustom ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-500 hover:text-gray-700']">
         <CalendarDays class="w-4 h-4" /> Период
       </button>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <button
+          :disabled="exporting"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          @click="exportCalls"
+        >
+          <Loader2 v-if="exporting" class="w-4 h-4 animate-spin" />
+          <Download v-else class="w-4 h-4" />
+          Выгрузить CSV
+        </button>
+        <button
+          :disabled="reevaluating"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 disabled:opacity-50 transition-colors"
+          @click="reevaluateCalls"
+        >
+          <Loader2 v-if="reevaluating" class="w-4 h-4 animate-spin" />
+          <RotateCcw v-else class="w-4 h-4" />
+          Переоценить
+        </button>
+      </div>
+    </div>
+
+    <!-- Re-evaluate result toast -->
+    <div v-if="reevaluateResult"
+      class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm"
+      :class="reevaluateResult.startsWith('Ошибка') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'">
+      {{ reevaluateResult }}
+      <button class="ml-auto text-current opacity-50 hover:opacity-100" @click="reevaluateResult = null">✕</button>
     </div>
 
     <!-- Custom dates -->

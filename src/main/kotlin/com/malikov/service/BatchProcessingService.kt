@@ -199,6 +199,30 @@ class BatchProcessingService(
         }
     }
 
+    fun reevaluateManagerCalls(
+        schema: String,
+        managerId: UUID,
+        since: Long? = null,
+        until: Long? = null,
+    ): Int {
+        val callIds = callRepo.findIdsByManagerAndStatus(
+            schema, managerId,
+            statuses = listOf("transcribed_only", "done"),
+            since = since, until = until,
+        )
+        log.info("Re-evaluating {} calls for manager {} in schema {}", callIds.size, managerId, schema)
+        scope.launch {
+            callIds.forEach { callId ->
+                semaphore.acquire()
+                launch {
+                    try { evaluateSingle(schema, callId) }
+                    finally { semaphore.release() }
+                }
+            }
+        }
+        return callIds.size
+    }
+
     private suspend fun evaluateSingle(schema: String, callId: UUID) {
         val call = callRepo.findById(schema, callId) ?: return
         val callType = call.callType ?: "unknown"

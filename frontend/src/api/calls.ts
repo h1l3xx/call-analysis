@@ -91,6 +91,12 @@ export const callsApi = {
     })
   },
 
+  reevaluate(managerId: string, params: { since?: number; until?: number } = {}) {
+    return client.post<{ queued: number }>('/api/v1/calls/reevaluate', null, {
+      params: { managerId, ...params },
+    })
+  },
+
   delete(id: string) {
     return client.delete(`/api/v1/calls/${id}`)
   },

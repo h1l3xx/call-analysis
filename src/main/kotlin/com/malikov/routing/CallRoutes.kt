@@ -6,6 +6,7 @@ import com.malikov.config.NotFoundException
 import com.malikov.dto.CreateCallRequest
 import com.malikov.service.AudioStorageService
 import com.malikov.service.BatchExportService
+import com.malikov.service.BatchProcessingService
 import com.malikov.service.CallService
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -25,7 +26,7 @@ private const val MAX_AUDIO_SIZE_BYTES = 100L * 1024 * 1024  // 100 MB
 private const val MIN_AUDIO_SIZE_BYTES = 1024L                // 1 KB — меньше не может быть валидным аудио
 private const val MAX_BULK_FILES = 2000
 
-fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, batchExportService: BatchExportService) {
+fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, batchExportService: BatchExportService, batchProcessingService: BatchProcessingService? = null) {
     route("/calls") {
 
         // ── Создание звонка (без аудио, для ручного / внешнего pipeline) ──
@@ -203,6 +204,25 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
             val since = call.parameters["since"]?.toLongOrNull()
             val until = call.parameters["until"]?.toLongOrNull()
             call.respond(service.getStats(p.schema!!, managerId, since, until))
+        }
+
+        // ── Переоценка звонков сотрудника через LLM ──
+        post("/reevaluate") {
+            val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
+            val managerId = call.parameters["managerId"]?.let {
+                runCatching { UUID.fromString(it) }.getOrNull()
+            } ?: run {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "managerId required"))
+                return@post
+            }
+            val since = call.parameters["since"]?.toLongOrNull()
+            val until = call.parameters["until"]?.toLongOrNull()
+            val svc = batchProcessingService ?: run {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Processing service unavailable"))
+                return@post
+            }
+            val queued = svc.reevaluateManagerCalls(p.schema!!, managerId, since, until)
+            call.respond(mapOf("queued" to queued))
         }
 
         // ── Список звонков ──
