@@ -23,6 +23,7 @@ data class CreatePromptTemplateRequest(
     val name: String,
     val description: String? = null,
     val content: String? = null,
+    val kind: String? = null,   // "evaluation" | "manager_evaluation"; defaults to "evaluation"
 )
 
 @Serializable

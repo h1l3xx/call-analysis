@@ -30,7 +30,7 @@ export const managersApi = {
   listEvaluations(managerId: string) {
     return client.get<ManagerEvaluationResponse[]>(`/api/v1/managers/${managerId}/evaluations`)
   },
-  evaluate(managerId: string, params: { since?: number; until?: number } = {}) {
+  evaluate(managerId: string, params: { since?: number; until?: number; templateId?: string } = {}) {
     return client.post<ManagerEvaluationResponse>(`/api/v1/managers/${managerId}/evaluate`, null, { params })
   },
 }

@@ -6,8 +6,8 @@ import {
   CheckCircle2, AlertTriangle, VolumeX, Clock, ChevronRight,
   Download, Sparkles, Loader2, TrendingUp, TrendingDown, Minus,
 } from 'lucide-vue-next'
-import { managersApi, callsApi } from '@/api'
-import type { ManagerResponse, CallResponse } from '@/types'
+import { managersApi, callsApi, promptTemplatesApi } from '@/api'
+import type { ManagerResponse, CallResponse, PromptTemplateResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
 import CallStatusBadge from '@/components/calls/CallStatusBadge.vue'
 
@@ -156,6 +156,19 @@ const evaluating = ref(false)
 const latestEvaluation = ref<ManagerEvaluationResponse | null>(null)
 const evaluationsLoading = ref(false)
 
+// Evaluation templates
+const evalTemplates = ref<PromptTemplateResponse[]>([])
+const selectedTemplateId = ref<string>('')
+
+async function fetchEvalTemplates() {
+  try {
+    const { data } = await promptTemplatesApi.list('manager_evaluation')
+    evalTemplates.value = data
+    if (data.length > 0 && !selectedTemplateId.value)
+      selectedTemplateId.value = data[0].id
+  } catch { /* ignore */ }
+}
+
 interface Assessment {
   summary_text?: string
   strengths?: string[]
@@ -188,7 +201,10 @@ async function fetchLatestEvaluation() {
 async function generateEvaluation() {
   evaluating.value = true
   try {
-    const { data } = await managersApi.evaluate(managerId.value, periodMs.value)
+    const { data } = await managersApi.evaluate(managerId.value, {
+      ...periodMs.value,
+      templateId: selectedTemplateId.value || undefined,
+    })
     latestEvaluation.value = data
   } catch (e: any) {
     alert(e?.response?.data?.error ?? 'Ошибка при формировании отчёта')
@@ -197,7 +213,7 @@ async function generateEvaluation() {
   }
 }
 
-onMounted(() => { fetchManager(); fetchStats(); fetchCalls(); fetchLatestEvaluation() })
+onMounted(() => { fetchManager(); fetchStats(); fetchCalls(); fetchLatestEvaluation(); fetchEvalTemplates() })
 watch(periodMs, fetchStats)
 
 function callLabel(c: CallResponse): string {
@@ -288,19 +304,29 @@ function formatPhone(p: string) {
           <Download v-else class="w-4 h-4" />
           CSV
         </button>
-        <button
-          :disabled="evaluating"
-          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:opacity-50"
-          :class="evaluationMatchesPeriod
-            ? 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-            : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'"
-          @click="generateEvaluation"
-          :title="`Сформировать LLM-отчёт за: ${periodLabel}`"
-        >
-          <Loader2 v-if="evaluating" class="w-4 h-4 animate-spin" />
-          <Sparkles v-else class="w-4 h-4" />
-          {{ evaluationMatchesPeriod ? 'Обновить отчёт' : 'Сформировать отчёт' }}
-        </button>
+        <div class="flex items-center gap-2">
+          <select
+            v-if="evalTemplates.length > 1"
+            v-model="selectedTemplateId"
+            class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white text-gray-700"
+            title="Шаблон оценки"
+          >
+            <option v-for="tpl in evalTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+          </select>
+          <button
+            :disabled="evaluating"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:opacity-50"
+            :class="evaluationMatchesPeriod
+              ? 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'"
+            @click="generateEvaluation"
+            :title="`Сформировать LLM-отчёт за: ${periodLabel}`"
+          >
+            <Loader2 v-if="evaluating" class="w-4 h-4 animate-spin" />
+            <Sparkles v-else class="w-4 h-4" />
+            {{ evaluationMatchesPeriod ? 'Обновить отчёт' : 'Сформировать отчёт' }}
+          </button>
+        </div>
       </div>
     </div>
 

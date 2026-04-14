@@ -55,6 +55,8 @@ class PromptTemplateService(
             "eval_external_incoming",
             "eval_external_outgoing",
         )
+        const val KIND_CALL_EVAL    = "evaluation"
+        const val KIND_MANAGER_EVAL = "manager_evaluation"
 
         fun defaultContent(id: String): String = when (id) {
             "internal_eval", "eval_internal", "eval_internal_incoming", "eval_internal_outgoing" -> DEFAULT_INTERNAL_INSTRUCTIONS
@@ -64,26 +66,26 @@ class PromptTemplateService(
         }
     }
 
+    /** Returns per-call evaluation templates (kind=evaluation), ordered with core directions first. */
     fun list(schema: String): List<PromptTemplateResponse> {
-        val all = repo.findAll(schema).filter { isEvaluationTemplate(it) && it.id !in HIDDEN_TECHNICAL_IDS }
+        val all = repo.findAll(schema).filter { isCallEvalTemplate(it) && it.id !in HIDDEN_TECHNICAL_IDS }
         val byId = all.associateBy { it.id }
         val orderedCore = CORE_DIRECTION_IDS.mapNotNull { byId[it] }
-        val managerEval = byId["manager_period_eval"]?.let { listOf(it) } ?: emptyList()
         val rest = all
-            .filterNot { it.id in CORE_DIRECTION_IDS || it.id == "manager_period_eval" }
+            .filterNot { it.id in CORE_DIRECTION_IDS }
             .sortedBy { it.name.lowercase() }
-        return orderedCore + managerEval + rest
+        return orderedCore + rest
     }
 
-    fun getById(schema: String, id: String): PromptTemplateResponse {
-        val tpl = repo.findById(schema, id) ?: throw NotFoundException("Prompt template '$id' not found")
-        if (!isEvaluationTemplate(tpl)) throw NotFoundException("Prompt template '$id' not found")
-        return tpl
-    }
+    /** Returns manager period evaluation templates (kind=manager_evaluation). */
+    fun listManagerEval(schema: String): List<PromptTemplateResponse> =
+        repo.findAll(schema).filter { it.kind == KIND_MANAGER_EVAL }.sortedBy { it.name.lowercase() }
+
+    fun getById(schema: String, id: String): PromptTemplateResponse =
+        repo.findById(schema, id) ?: throw NotFoundException("Prompt template '$id' not found")
 
     fun update(schema: String, id: String, content: String): PromptTemplateResponse {
         val existing = getById(schema, id)
-        require(isEvaluationTemplate(existing)) { "Unknown template: $id" }
         require(content.isNotBlank()) { "Содержимое не может быть пустым" }
 
         val updated = repo.updateContent(schema, id, content)
@@ -104,8 +106,15 @@ class PromptTemplateService(
     fun create(schema: String, request: CreatePromptTemplateRequest): PromptTemplateResponse {
         val name = request.name.trim()
         require(name.isNotBlank()) { "Название не может быть пустым" }
-        val content = request.content?.trim()?.takeIf { it.isNotBlank() } ?: DEFAULT_EXTERNAL_INSTRUCTIONS
-        val id = "eval_custom_${UUID.randomUUID().toString().replace("-", "").take(12)}"
+        val kind = when (request.kind) {
+            KIND_MANAGER_EVAL -> KIND_MANAGER_EVAL
+            else -> KIND_CALL_EVAL
+        }
+        val defaultContent = if (kind == KIND_MANAGER_EVAL)
+            DEFAULT_MANAGER_EVAL_INSTRUCTIONS else DEFAULT_EXTERNAL_INSTRUCTIONS
+        val content = request.content?.trim()?.takeIf { it.isNotBlank() } ?: defaultContent
+        val prefix = if (kind == KIND_MANAGER_EVAL) "mgr_eval_" else "eval_custom_"
+        val id = "$prefix${UUID.randomUUID().toString().replace("-", "").take(12)}"
 
         return repo.create(
             schema = schema,
@@ -113,7 +122,7 @@ class PromptTemplateService(
             name = name,
             description = request.description?.trim()?.takeIf { it.isNotBlank() },
             content = content,
-            kind = "evaluation",
+            kind = kind,
             isSystem = false,
         )
     }
@@ -127,8 +136,8 @@ class PromptTemplateService(
     fun getContent(schema: String, id: String): String =
         repo.findContentById(schema, id) ?: defaultContent(id)
 
-    private fun isEvaluationTemplate(tpl: PromptTemplateResponse): Boolean {
-        if (tpl.kind == "evaluation") return true
+    private fun isCallEvalTemplate(tpl: PromptTemplateResponse): Boolean {
+        if (tpl.kind == KIND_CALL_EVAL) return true
         if (tpl.id.startsWith("eval_")) return true
         return tpl.id in KNOWN_IDS
     }

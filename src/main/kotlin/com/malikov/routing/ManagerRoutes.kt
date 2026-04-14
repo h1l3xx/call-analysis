@@ -85,11 +85,12 @@ fun Route.managerRoutes(service: ManagerService, evaluationService: ManagerEvalu
             val managerId = pathUuid("id")
             val since = call.parameters["since"]?.toLongOrNull()
             val until = call.parameters["until"]?.toLongOrNull()
+            val templateId = call.parameters["templateId"]
             val svc = evaluationService ?: run {
                 call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Evaluation service unavailable"))
                 return@post
             }
-            call.respond(HttpStatusCode.Created, svc.generate(p.schema!!, managerId, since, until))
+            call.respond(HttpStatusCode.Created, svc.generate(p.schema!!, managerId, since, until, templateId))
         }
     }
 }

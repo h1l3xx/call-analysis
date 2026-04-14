@@ -15,6 +15,7 @@ import java.util.UUID
 data class ManagerEvaluationResponse(
     val id: String,
     val managerId: String,
+    val templateId: String?,
     val periodFrom: Long?,
     val periodTo: Long?,
     val callCount: Int,
@@ -45,7 +46,9 @@ class ManagerEvaluationService(
         managerId: UUID,
         since: Long? = null,
         until: Long? = null,
+        templateId: String? = null,
     ): ManagerEvaluationResponse {
+        val resolvedTemplateId = templateId?.takeIf { it.isNotBlank() } ?: TEMPLATE_ID
         val manager = managerRepo.findById(schema, managerId)
             ?: error("Manager $managerId not found in schema $schema")
 
@@ -84,14 +87,15 @@ class ManagerEvaluationService(
         val assessmentJson = if (callCount == 0) {
             buildEmptyAssessment()
         } else {
-            buildLlmAssessment(schema, manager.fullName, callCount, avgScore, scores)
+            buildLlmAssessment(schema, manager.fullName, callCount, avgScore, scores, resolvedTemplateId)
         }
 
-        val id = saveEvaluation(schema, managerId, since, until, callCount, avgScore, assessmentJson)
+        val id = saveEvaluation(schema, managerId, since, until, callCount, avgScore, assessmentJson, resolvedTemplateId)
 
         return ManagerEvaluationResponse(
             id         = id.toString(),
             managerId  = managerId.toString(),
+            templateId = resolvedTemplateId,
             periodFrom = since,
             periodTo   = until,
             callCount  = callCount,
@@ -102,7 +106,7 @@ class ManagerEvaluationService(
     }
 
     /** Fetch past evaluations for a manager (most recent first). */
-    fun list(schema: String, managerId: UUID, limit: Int = 5): List<ManagerEvaluationResponse> =
+    fun list(schema: String, managerId: UUID, limit: Int = 10): List<ManagerEvaluationResponse> =
         transaction {
             val t = TManagerEvaluations(schema)
             t.selectAll()
@@ -113,6 +117,7 @@ class ManagerEvaluationService(
                     ManagerEvaluationResponse(
                         id         = row[t.id].toString(),
                         managerId  = row[t.managerId].toString(),
+                        templateId = row[t.templateId],
                         periodFrom = row[t.periodFrom],
                         periodTo   = row[t.periodTo],
                         callCount  = row[t.callCount],
@@ -131,6 +136,7 @@ class ManagerEvaluationService(
         callCount: Int,
         avgScore: Double?,
         scores: List<CallScoreEntry>,
+        templateId: String = TEMPLATE_ID,
     ): String {
         val scoreStr = avgScore?.let { "%.1f".format(it) } ?: "н/д"
 
@@ -151,11 +157,11 @@ class ManagerEvaluationService(
         }
 
         val customInstructions = try {
-            promptTemplateService?.getContent(schema, TEMPLATE_ID)
+            promptTemplateService?.getContent(schema, templateId)
                 ?.takeIf { it.isNotBlank() }
                 ?: PromptTemplateService.DEFAULT_MANAGER_EVAL_INSTRUCTIONS
         } catch (e: Exception) {
-            log.warn("Could not load prompt template '{}' for schema {}: {}", TEMPLATE_ID, schema, e.message)
+            log.warn("Could not load prompt template '{}' for schema {}: {}", templateId, schema, e.message)
             PromptTemplateService.DEFAULT_MANAGER_EVAL_INSTRUCTIONS
         }
 
@@ -218,12 +224,14 @@ $customInstructions
         callCount: Int,
         avgScore: Double?,
         assessmentJson: String,
+        templateId: String?,
     ): UUID = transaction {
         val t = TManagerEvaluations(schema)
         val newId = UUID.randomUUID()
         t.insert {
             it[t.id]         = newId
             it[t.managerId]  = managerId
+            it[t.templateId] = templateId
             it[t.periodFrom] = since
             it[t.periodTo]   = until
             it[t.callCount]  = callCount

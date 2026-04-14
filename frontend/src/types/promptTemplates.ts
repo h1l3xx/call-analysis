@@ -9,6 +9,7 @@ export interface PromptTemplateResponse {
 }
 
 export interface CreatePromptTemplateRequest {
+  kind?: string
   name: string
   description?: string
   content?: string

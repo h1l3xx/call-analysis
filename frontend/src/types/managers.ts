@@ -22,6 +22,7 @@ export interface ManagerResponse {
 export interface ManagerEvaluationResponse {
   id: string
   managerId: string
+  templateId: string | null
   periodFrom: number | null
   periodTo: number | null
   callCount: number

@@ -222,6 +222,7 @@ class TManagerPhoneNumbers(schema: String) : Table("$schema.manager_phone_number
 class TManagerEvaluations(schema: String) : Table("$schema.manager_evaluations") {
     val id          = uuid("id").autoGenerate()
     val managerId   = uuid("manager_id")
+    val templateId  = text("template_id").nullable()
     val periodFrom  = long("period_from").nullable()
     val periodTo    = long("period_to").nullable()
     val callCount   = integer("call_count").default(0)

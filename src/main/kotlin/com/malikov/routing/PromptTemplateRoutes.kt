@@ -18,7 +18,10 @@ fun Route.promptTemplateRoutes(service: PromptTemplateService, evaluator: Intern
 
         get {
             val p = requireTenantRole(Role.CLIENT_ADMIN, Role.TEAM_LEAD)
-            call.respond(service.list(p.schema!!))
+            val kind = call.parameters["kind"]
+            val result = if (kind == "manager_evaluation") service.listManagerEval(p.schema!!)
+                         else service.list(p.schema!!)
+            call.respond(result)
         }
 
         get("/{id}") {

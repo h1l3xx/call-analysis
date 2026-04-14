@@ -2,8 +2,8 @@ import client from './client'
 import type { PromptTemplateResponse, SuggestResponse, CreatePromptTemplateRequest } from '@/types'
 
 export const promptTemplatesApi = {
-  list() {
-    return client.get<PromptTemplateResponse[]>('/api/v1/prompt-templates')
+  list(kind?: string) {
+    return client.get<PromptTemplateResponse[]>('/api/v1/prompt-templates', { params: kind ? { kind } : {} })
   },
   get(id: string) {
     return client.get<PromptTemplateResponse>(`/api/v1/prompt-templates/${id}`)
