@@ -20,7 +20,7 @@ BEGIN
                 ''Итоговая оценка сотрудника'',
                 ''Промпт для формирования итогового LLM-отчёта по сотруднику за выбранный период'',
                 $1,
-                ''manager_evaluation'',
+                ''evaluation'',
                 true
              )
              ON CONFLICT (id) DO NOTHING',
