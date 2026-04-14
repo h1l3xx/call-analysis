@@ -5,7 +5,6 @@ BEGIN
         CREATE TABLE IF NOT EXISTS %I.manager_evaluations (
             id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             manager_id      UUID NOT NULL REFERENCES %I.managers(id) ON DELETE CASCADE,
-            template_id     TEXT,
             period_from     BIGINT,
             period_to       BIGINT,
             call_count      INTEGER NOT NULL DEFAULT 0,
