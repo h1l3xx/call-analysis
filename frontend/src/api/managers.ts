@@ -2,7 +2,7 @@ import client from './client'
 import type { AddPhoneRequest, ManagerEvaluationResponse, ManagerPhoneResponse, ManagerResponse, PaginatedResponse } from '@/types'
 
 export const managersApi = {
-  list(params: { page?: number; pageSize?: number; isActive?: boolean } = {}) {
+  list(params: { page?: number; pageSize?: number; isActive?: boolean; search?: string; departmentId?: string } = {}) {
     return client.get<PaginatedResponse<ManagerResponse>>('/api/v1/managers', { params })
   },
   get(id: string) {

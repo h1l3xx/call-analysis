@@ -72,6 +72,8 @@ class ManagerRepository {
         off: Long,
         limit: Int,
         isActive: Boolean? = null,
+        search: String? = null,
+        departmentId: UUID? = null,
     ): Pair<List<ManagerRow>, Long> = transaction {
         val m = TManagers(schema)
         val d = TDepartments(schema)
@@ -80,9 +82,20 @@ class ManagerRepository {
             .join(d, JoinType.LEFT, m.departmentId, d.id)
             .join(Users, JoinType.INNER, m.userId, Users.id)
 
-        val query = base.selectAll().let { q ->
-            isActive?.let { active -> q.where { m.isActive eq active } } ?: q
-        }
+        val conditions = listOfNotNull(
+            isActive?.let { Op.build { m.isActive eq it } },
+            departmentId?.let { Op.build { m.departmentId eq it } },
+            search?.takeIf { it.isNotBlank() }?.let { q ->
+                val pattern = "%${q.lowercase()}%"
+                Op.build {
+                    (LowerCase(Users.fullName) like pattern) or
+                    (LowerCase(Users.email) like pattern)
+                }
+            },
+        )
+
+        val query = if (conditions.isEmpty()) base.selectAll()
+                    else base.selectAll().where(conditions.reduce { a, b -> a and b })
 
         val total = query.count()
         val rows = query

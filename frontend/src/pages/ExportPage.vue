@@ -10,13 +10,17 @@ const departments = ref<{ id: string; name: string }[]>([])
 const allManagers = ref<ManagerResponse[]>([])
 const exporting = ref(false)
 
-const departmentId = ref('')
+const selectedDepartments = ref<string[]>([])
 const selectedManagers = ref<string[]>([])
 const status = ref('')
 const callType = ref('')
 const dateFrom = ref('')
 const dateTo = ref('')
 const search = ref('')
+
+const departmentOptions = computed<SelectOption[]>(() =>
+  departments.value.map(d => ({ id: d.id, label: d.name }))
+)
 
 const managerOptions = computed<SelectOption[]>(() =>
   allManagers.value.map(m => ({
@@ -42,7 +46,7 @@ const callTypeOptions = [
 ]
 
 const hasFilters = computed(() =>
-  departmentId.value || selectedManagers.value.length || status.value || callType.value || dateFrom.value || dateTo.value || search.value
+  selectedDepartments.value.length || selectedManagers.value.length || status.value || callType.value || dateFrom.value || dateTo.value || search.value
 )
 
 onMounted(async () => {
@@ -57,7 +61,7 @@ onMounted(async () => {
 })
 
 function resetFilters() {
-  departmentId.value = ''
+  selectedDepartments.value = []
   selectedManagers.value = []
   status.value = ''
   callType.value = ''
@@ -71,7 +75,7 @@ async function doExport() {
   exporting.value = true
   try {
     const params: Record<string, string | number> = {}
-    if (departmentId.value) params.departmentId = departmentId.value
+    if (selectedDepartments.value.length) params.departmentIds = selectedDepartments.value.join(',')
     if (selectedManagers.value.length) params.managerIds = selectedManagers.value.join(',')
     if (status.value) params.status = status.value
     if (callType.value) params.callType = callType.value
@@ -110,16 +114,14 @@ async function doExport() {
 
       <!-- Filters grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <!-- Department -->
+        <!-- Departments -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Отдел</label>
-          <select
-            v-model="departmentId"
-            class="w-full appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-          >
-            <option value="">Все отделы</option>
-            <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Отделы</label>
+          <MultiSelect
+            v-model="selectedDepartments"
+            :options="departmentOptions"
+            placeholder="Все отделы..."
+          />
         </div>
 
         <!-- Status -->

@@ -253,6 +253,10 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
         get("/export") {
             val p = requireTenantRole(Role.TEAM_LEAD, Role.CLIENT_ADMIN)
             val departmentId = call.parameters["departmentId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            val departmentIds = call.parameters["departmentIds"]
+                ?.split(",")
+                ?.mapNotNull { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
+                ?.takeIf { it.isNotEmpty() }
             val managerIds = call.parameters["managerIds"]
                 ?.split(",")
                 ?.mapNotNull { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
@@ -272,6 +276,7 @@ fun Route.callRoutes(service: CallService, audioStorage: AudioStorageService, ba
                 sinceMs = sinceMs,
                 untilMs = untilMs,
                 search = search,
+                departmentIds = departmentIds,
             )
             val ts = java.time.LocalDate.now().toString()
             call.response.header(

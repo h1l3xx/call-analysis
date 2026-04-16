@@ -43,6 +43,7 @@ export const callsApi = {
 
   async exportCsv(params: {
     departmentId?: string
+    departmentIds?: string
     managerIds?: string
     status?: string
     callType?: string

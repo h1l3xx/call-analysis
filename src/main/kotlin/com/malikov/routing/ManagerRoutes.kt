@@ -26,7 +26,10 @@ fun Route.managerRoutes(service: ManagerService, evaluationService: ManagerEvalu
                 call.respond(listOf(manager))
             } else {
                 val isActive = call.parameters["isActive"]?.toBooleanStrictOrNull()
-                call.respond(service.list(p.schema!!, params, isActive))
+                val search = call.parameters["search"]?.takeIf { it.isNotBlank() }
+                val departmentId = call.parameters["departmentId"]
+                    ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                call.respond(service.list(p.schema!!, params, isActive, search, departmentId))
             }
         }
 

@@ -387,6 +387,7 @@ class CallRepository {
         sinceMs: Long? = null,
         untilMs: Long? = null,
         search: String? = null,
+        departmentIds: List<UUID>? = null,
     ): List<CallResultRow> = transaction {
         val cl = TCalls(schema)
         val m  = TManagers(schema)
@@ -395,8 +396,14 @@ class CallRepository {
         val sm = TSpeakerMetrics(schema)
         val qs = TQualityScores(schema)
 
+        val effectiveDeptIds = when {
+            departmentIds != null && departmentIds.isNotEmpty() -> departmentIds
+            departmentId != null -> listOf(departmentId)
+            else -> null
+        }
+
         val conditions = listOfNotNull(
-            departmentId?.let { Op.build { m.departmentId eq it } },
+            effectiveDeptIds?.let { ids -> Op.build { m.departmentId inList ids } },
             managerIds?.takeIf { it.isNotEmpty() }?.let { ids ->
                 Op.build { cl.managerId inList ids }
             },

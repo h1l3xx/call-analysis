@@ -54,9 +54,10 @@ class BatchExportService(
         sinceMs: Long? = null,
         untilMs: Long? = null,
         search: String? = null,
+        departmentIds: List<UUID>? = null,
     ): String {
         val results = callRepo.findResultsByFilters(
-            schema, departmentId, managerIds, status, callType, sinceMs, untilMs, search,
+            schema, departmentId, managerIds, status, callType, sinceMs, untilMs, search, departmentIds,
         )
 
         val allMgrIds = (results.mapNotNull { it.call.managerId } +

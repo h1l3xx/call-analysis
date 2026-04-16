@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ChevronLeft, ChevronRight, Phone, Plus, Trash2, Star, Loader2 } from 'lucide-vue-next'
-import { managersApi } from '@/api'
+import { ChevronLeft, ChevronRight, Phone, Plus, Trash2, Star, Loader2, Search, X } from 'lucide-vue-next'
+import { managersApi, callsApi } from '@/api'
 import type { AddPhoneRequest, ManagerPhoneResponse, ManagerResponse } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useFormatters } from '@/composables/useFormatters'
@@ -15,6 +15,30 @@ const loading = ref(true)
 const page = ref(1)
 const totalPages = ref(1)
 
+// ── Filters ───────────────────────────────────────────────────────────────────
+const search = ref('')
+const filterDepartmentId = ref('')
+const filterActive = ref('')
+const departments = ref<{ id: string; name: string }[]>([])
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value = 1; fetchManagers() }, 300)
+}
+
+function onFilterChange() { page.value = 1; fetchManagers() }
+
+function resetFilters() {
+  search.value = ''
+  filterDepartmentId.value = ''
+  filterActive.value = ''
+  page.value = 1
+  fetchManagers()
+}
+
+const hasFilters = () => !!(search.value || filterDepartmentId.value || filterActive.value)
+
 // Inline phone editing state
 const expandedId = ref<string | null>(null)
 const addingFor = ref<string | null>(null)
@@ -26,7 +50,11 @@ const deletingPhoneId = ref<string | null>(null)
 async function fetchManagers() {
   loading.value = true
   try {
-    const { data } = await managersApi.list({ page: page.value, pageSize: 20 })
+    const params: Record<string, any> = { page: page.value, pageSize: 20 }
+    if (search.value.trim()) params.search = search.value.trim()
+    if (filterDepartmentId.value) params.departmentId = filterDepartmentId.value
+    if (filterActive.value !== '') params.isActive = filterActive.value === 'true'
+    const { data } = await managersApi.list(params)
     if (Array.isArray(data)) {
       managers.value = data
       totalPages.value = 1
@@ -90,7 +118,13 @@ function formatPhone(p: string): string {
   return p
 }
 
-onMounted(fetchManagers)
+onMounted(async () => {
+  try {
+    const { data } = await callsApi.departments()
+    departments.value = data
+  } catch { /* ignore */ }
+  await fetchManagers()
+})
 </script>
 
 <template>
@@ -98,6 +132,53 @@ onMounted(fetchManagers)
     <h1 class="text-2xl font-bold text-gray-900">
       {{ auth.isManager ? 'Мой профиль' : 'Сотрудники' }}
     </h1>
+
+    <!-- Filters (admins/team leads only) -->
+    <div v-if="!auth.isManager" class="flex flex-wrap items-center gap-3">
+      <!-- Search -->
+      <div class="relative flex-1 min-w-48">
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          v-model="search"
+          type="text"
+          placeholder="Поиск по имени или email..."
+          class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+          @input="onSearchInput"
+        />
+      </div>
+
+      <!-- Department -->
+      <select
+        v-if="departments.length"
+        v-model="filterDepartmentId"
+        class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+        @change="onFilterChange"
+      >
+        <option value="">Все отделы</option>
+        <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
+      </select>
+
+      <!-- Active status -->
+      <select
+        v-model="filterActive"
+        class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+        @change="onFilterChange"
+      >
+        <option value="">Все статусы</option>
+        <option value="true">Активные</option>
+        <option value="false">Неактивные</option>
+      </select>
+
+      <!-- Reset -->
+      <button
+        v-if="hasFilters()"
+        class="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-2 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+        @click="resetFilters"
+      >
+        <X class="w-4 h-4" />
+        Сбросить
+      </button>
+    </div>
 
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div v-if="loading" class="p-12 text-center text-gray-400">Загрузка...</div>

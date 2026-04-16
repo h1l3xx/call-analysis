@@ -14,8 +14,14 @@ import java.util.UUID
 
 class ManagerService(private val repo: ManagerRepository) {
 
-    fun list(schema: String, params: PaginationParams, isActive: Boolean? = null): PaginatedResponse<ManagerResponse> {
-        val (rows, total) = repo.list(schema, params.offset, params.pageSize, isActive)
+    fun list(
+        schema: String,
+        params: PaginationParams,
+        isActive: Boolean? = null,
+        search: String? = null,
+        departmentId: UUID? = null,
+    ): PaginatedResponse<ManagerResponse> {
+        val (rows, total) = repo.list(schema, params.offset, params.pageSize, isActive, search, departmentId)
         return paginated(rows.map { it.toResponse() }, total, params)
     }
 
