@@ -108,7 +108,7 @@ google_sheets:
   spreadsheet_id: ""
 
 security:
-  allowed_extensions: [".mp3", ".wav", ".m4a", ".ogg", ".flac"]
+  allowed_extensions: [".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".opus"]
   max_file_size_mb: 500
   rate_limit_per_hour: 2000
 
