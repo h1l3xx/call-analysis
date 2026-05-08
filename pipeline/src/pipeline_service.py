@@ -76,11 +76,7 @@ class CallAnalysisPipeline:
     def _build_gpu_monitor(self) -> GPUMonitor | None:
         if self.config.asr.device != "cuda":
             return None
-        try:
-            return GPUMonitor(gpu_index=0)
-        except Exception as exc:
-            logger.warning("GPU monitor init failed (will skip): %s", exc)
-            return None
+        return GPUMonitor(gpu_index=0)
 
     def _build_diarization_engine(self):
         if not self.config.diarization.enabled:
