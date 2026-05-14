@@ -136,6 +136,32 @@ services:
       timeout: 5s
       retries: 5
 
+  svyaztransit:
+    build: ./pipeline/voip/svyaztransit
+    container_name: malikov_svyaztransit
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      STRANZIT_USERNAME: ${STRANZIT_USERNAME:-}
+      STRANZIT_PASSWORD: ${STRANZIT_PASSWORD:-}
+      CALL_FILTER_DIRECTION: ${CALL_FILTER_DIRECTION:-any}
+      CALL_FILTER_DURATION_OP: ${CALL_FILTER_DURATION_OP:->= }
+      CALL_FILTER_DURATION: ${CALL_FILTER_DURATION:-00:01:00}
+      CALL_FILTER_START: ${CALL_FILTER_START:-today_start}
+      CALL_FILTER_END: ${CALL_FILTER_END:-now}
+      CHECK_INTERVAL: ${CHECK_INTERVAL:-300}
+      SCANOVICH_URL: http://app:8080
+      SCANOVICH_EMAIL: ${SCANOVICH_EMAIL:-}
+      SCANOVICH_PASSWORD: ${SCANOVICH_PASSWORD:-}
+      SCANOVICH_DELETE_AFTER_UPLOAD: ${SCANOVICH_DELETE_AFTER_UPLOAD:-true}
+      DATABASE_PATH: /data/stranzit_calls.db
+      DOWNLOAD_DIR: /data/downloads
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - stranzit_data:/data
+
 volumes:
   postgres_data:
   redis_data:
@@ -145,3 +171,4 @@ volumes:
   pipeline_quality:
   caddy_data:
   caddy_config:
+  stranzit_data:
