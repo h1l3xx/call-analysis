@@ -85,9 +85,20 @@ class DatabaseManager:
                     call_direction TEXT,
                     duration_seconds INTEGER,
                     downloaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    local_path TEXT
+                    local_path TEXT,
+                    uploaded_at TIMESTAMP,
+                    upload_status TEXT DEFAULT 'pending'
                 )
             ''')
+            # Миграция: добавляем столбцы, если таблица уже существовала без них
+            for col_def in (
+                "ALTER TABLE downloaded_records ADD COLUMN uploaded_at TIMESTAMP",
+                "ALTER TABLE downloaded_records ADD COLUMN upload_status TEXT DEFAULT 'pending'",
+            ):
+                try:
+                    conn.execute(col_def)
+                except Exception:
+                    pass
             conn.commit()
 
     def is_record_downloaded(self, local_path: str) -> bool:
@@ -115,6 +126,18 @@ class DatabaseManager:
                 record.duration_seconds,
                 local_path
             ))
+            conn.commit()
+
+    def mark_record_uploaded(self, local_path: str, success: bool) -> None:
+        """Зафиксировать результат загрузки в Scanovich."""
+        status = "done" if success else "failed"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE downloaded_records "
+                "SET uploaded_at = CURRENT_TIMESTAMP, upload_status = ? "
+                "WHERE local_path = ?",
+                (status, local_path),
+            )
             conn.commit()
 
     def get_stats(self) -> dict:
@@ -174,9 +197,31 @@ class CallRecordsWatcher:
 
         # Мониторинг ресурсов
         self.last_cleanup = datetime.now()
-        
+
         # Сохраняем конфигурацию фильтров для использования
         self.filter_config = filter_config
+
+        # Scanovich API uploader (опционально)
+        scanovich_cfg = config.scanovich
+        self.uploader = None
+        self.delete_after_upload = False
+        if scanovich_cfg.enabled:
+            from scanovich_uploader import ScanovichUploader
+            self.uploader = ScanovichUploader(
+                url=scanovich_cfg.url,
+                email=scanovich_cfg.email,
+                password=scanovich_cfg.password,
+            )
+            self.delete_after_upload = scanovich_cfg.delete_after_upload
+            self.logger.info(
+                "Интеграция со Scanovich включена: %s (delete_after_upload=%s)",
+                scanovich_cfg.url, self.delete_after_upload,
+            )
+        else:
+            self.logger.info(
+                "Интеграция со Scanovich отключена "
+                "(задайте SCANOVICH_URL, SCANOVICH_EMAIL, SCANOVICH_PASSWORD для включения)"
+            )
 
     def check_disk_space(self) -> dict:
         """Проверить свободное место на диске"""
@@ -487,38 +532,34 @@ class CallRecordsWatcher:
             return []
 
     def generate_readable_filename(self, record: CallRecord) -> str:
-        """Создать читаемое имя файла в формате сайта"""
+        """Создать читаемое имя файла, совместимое с PhoneParser.
+
+        Формат: ДД.ММ.ГГГГ_ЧЧ-ММ-СС_<CallParties>_<Направление>.mp3
+        Скобки в CallParties (например «1586 (504750)») обязательно сохраняются —
+        они нужны PhoneParser для определения внутреннего номера менеджера.
+        """
         try:
-            # Парсим timestamp
             if record.start_time.startswith('/Date('):
                 timestamp = int(record.start_time[6:-2]) / 1000
                 dt = datetime.fromtimestamp(timestamp)
 
-                # Формат: "21.09.2025_16-42-39_7XXXXXXXXXX , 1586 (504750)_Входящий.mp3"
                 date_str = dt.strftime('%d.%m.%Y')
                 time_str = dt.strftime('%H-%M-%S')
 
-                # Извлекаем номер телефона из CallParties
-                phone = "unknown"
-                if record.call_parties:
-                    # Парсим строку типа "7XXXXXXXXXX , 1586 (504750)"
-                    parts = record.call_parties.split(',')
-                    if parts and parts[0].strip():
-                        phone = parts[0].strip()
+                parties = record.call_parties or "unknown"
+                direction = record.call_direction or "unknown"
 
-                # Собираем имя файла
-                filename = f"{date_str}_{time_str}_{phone}_{record.call_direction}.mp3"
-                # Заменяем пробелы и специальные символы на подчеркивания для безопасности
-                filename = filename.replace(' ', '_').replace(',', '_').replace('(', '').replace(')', '').replace('__', '_')
-
+                filename = f"{date_str}_{time_str}_{parties}_{direction}.mp3"
+                # Заменяем только символы, запрещённые в именах файлов Linux/macOS.
+                # Скобки, запятые и пробелы — оставляем: они нужны PhoneParser.
+                import re as _re
+                filename = _re.sub(r'[/\\:*?"<>|]', '_', filename)
                 return filename
             else:
-                # Fallback на оригинальное имя
                 return record.file_name.replace('.wav', '.mp3')
 
         except Exception as e:
             self.logger.warning(f"Ошибка генерации имени файла для {record.id}: {e}")
-            # Fallback на оригинальное имя
             return record.file_name.replace('.wav', '.mp3')
 
     def download_record(self, record: CallRecord) -> Optional[str]:
@@ -568,7 +609,7 @@ class CallRecordsWatcher:
         return None
 
     def process_new_records(self, records: List[CallRecord]) -> int:
-        """Обработать новые записи и скачать их"""
+        """Обработать новые записи: скачать и при необходимости отправить в Scanovich."""
         downloaded_count = 0
 
         for record in records:
@@ -576,17 +617,32 @@ class CallRecordsWatcher:
             local_path = os.path.join(self.download_dir, filename)
 
             if not self.db.is_record_downloaded(local_path):
-                self.logger.info(f"🎵 Новая запись: {record.file_name} - {record.call_direction} - {record.get_duration_str()}")
+                self.logger.info(
+                    "🎵 Новая запись: %s — %s — %s",
+                    record.file_name, record.call_direction, record.get_duration_str(),
+                )
 
                 downloaded_path = self.download_record(record)
                 if downloaded_path:
                     self.db.mark_record_downloaded(record, downloaded_path)
                     downloaded_count += 1
 
+                    # Загрузка в Scanovich (если настроена)
+                    if self.uploader is not None:
+                        upload_ok = self.uploader.upload(downloaded_path, filename)
+                        self.db.mark_record_uploaded(downloaded_path, upload_ok)
+
+                        if upload_ok and self.delete_after_upload:
+                            try:
+                                os.remove(downloaded_path)
+                                self.logger.debug("Локальный файл удалён после загрузки: %s", filename)
+                            except Exception as exc:
+                                self.logger.warning("Не удалось удалить файл %s: %s", filename, exc)
+
                     # Небольшая пауза между загрузками
                     time.sleep(1)
             else:
-                self.logger.debug(f"Запись {record.file_name} уже загружена")
+                self.logger.debug("Запись %s уже загружена", record.file_name)
 
         return downloaded_count
 

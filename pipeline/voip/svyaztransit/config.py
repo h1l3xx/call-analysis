@@ -69,6 +69,27 @@ class LoggingConfig(BaseSettings):
     log_file: Optional[str] = Field(default="watcher.log", alias="FILE")
 
 
+class ScanovichConfig(BaseSettings):
+    """Scanovich backend integration (optional).
+
+    If all three fields are set, each downloaded recording is automatically
+    POSTed to ``POST /api/v1/calls/bulk-upload`` after download.
+    The endpoint performs filename-based manager matching via PhoneParser,
+    so filenames must preserve the PBX-extension format (e.g. «1586 (504750)»).
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SCANOVICH_", extra="ignore")
+
+    url: Optional[str] = Field(default=None, alias="URL")
+    email: Optional[str] = Field(default=None, alias="EMAIL")
+    password: Optional[str] = Field(default=None, alias="PASSWORD")
+    delete_after_upload: bool = Field(default=False, alias="DELETE_AFTER_UPLOAD")
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.url and self.email and self.password)
+
+
 class AppConfig(BaseSettings):
     """Main application config."""
 
@@ -85,6 +106,7 @@ class AppConfig(BaseSettings):
     filters: FilterConfig = Field(default_factory=FilterConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    scanovich: ScanovichConfig = Field(default_factory=ScanovichConfig)
 
     @model_validator(mode="after")
     def apply_download_dir_from_env(self):
