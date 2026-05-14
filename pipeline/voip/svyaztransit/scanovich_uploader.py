@@ -68,53 +68,70 @@ class ScanovichUploader:
 
     # ──────────────────────────── upload ────────────────────────────
 
-    def upload(self, filepath: str, filename: str) -> bool:
-        """Отправить файл в Scanovich bulk-upload.
+    def upload_batch(self, files: list[tuple[str, str]]) -> dict[str, bool]:
+        """Отправить несколько файлов одним запросом — один батч в Scanovich.
 
-        Возвращает True если хотя бы один файл принят в очередь (queued > 0).
+        files: список пар (filepath, filename).
+        Возвращает dict {filepath: True/False} с результатом для каждого файла.
         """
+        if not files:
+            return {}
         if not self._ensure_token():
-            return False
+            return {fp: False for fp, _ in files}
 
-        result = self._do_upload(filepath, filename)
+        result = self._do_upload_batch(files)
 
-        if result is None:
-            return False
-
-        # HTTP 401 → re-login + retry
         if result == 401:
             logger.info("Scanovich: токен протух, повторная аутентификация…")
             self._token = None
             if not self._login():
-                return False
-            result = self._do_upload(filepath, filename)
-            if result is None or isinstance(result, int):
-                return False
+                return {fp: False for fp, _ in files}
+            result = self._do_upload_batch(files)
 
-        return self._log_result(filename, result)
+        if result is None or isinstance(result, int):
+            return {fp: False for fp, _ in files}
 
-    def _do_upload(self, filepath: str, filename: str) -> Optional[dict | int]:
-        """Выполнить HTTP-запрос. Возвращает dict с ответом, int с кодом ошибки или None."""
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "mp3"
-        mime = _MIME_BY_EXT.get(ext, "application/octet-stream")
+        return self._log_batch_result(files, result)
+
+    def upload(self, filepath: str, filename: str) -> bool:
+        """Отправить один файл (обёртка над upload_batch)."""
+        results = self.upload_batch([(filepath, filename)])
+        return results.get(filepath, False)
+
+    def _do_upload_batch(self, files: list[tuple[str, str]]) -> Optional[dict | int]:
+        """Multipart-запрос с несколькими файлами. Возвращает dict, 401 или None."""
+        opened = []
         try:
-            with open(filepath, "rb") as fh:
-                resp = requests.post(
-                    f"{self.base_url}/api/v1/calls/bulk-upload",
-                    headers={"Authorization": f"Bearer {self._token}"},
-                    files={"files": (filename, fh, mime)},
-                    timeout=120,
-                )
+            multipart = []
+            for filepath, filename in files:
+                ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "mp3"
+                mime = _MIME_BY_EXT.get(ext, "application/octet-stream")
+                fh = open(filepath, "rb")  # noqa: WPS515
+                opened.append(fh)
+                multipart.append(("files", (filename, fh, mime)))
+
+            resp = requests.post(
+                f"{self.base_url}/api/v1/calls/bulk-upload",
+                headers={"Authorization": f"Bearer {self._token}"},
+                files=multipart,
+                timeout=120 + 30 * len(files),
+            )
             if resp.status_code == 401:
                 return 401
             resp.raise_for_status()
             return resp.json()
         except requests.HTTPError as exc:
-            logger.error("Scanovich: HTTP-ошибка при загрузке %s — %s", filename, exc)
+            logger.error("Scanovich: HTTP-ошибка при загрузке батча — %s", exc)
             return None
         except Exception as exc:
-            logger.error("Scanovich: ошибка при загрузке %s — %s", filename, exc)
+            logger.error("Scanovich: ошибка при загрузке батча — %s", exc)
             return None
+        finally:
+            for fh in opened:
+                fh.close()
+
+    def _do_upload(self, filepath: str, filename: str) -> Optional[dict | int]:
+        return self._do_upload_batch([(filepath, filename)])
 
     @staticmethod
     def _log_result(filename: str, data: dict) -> bool:

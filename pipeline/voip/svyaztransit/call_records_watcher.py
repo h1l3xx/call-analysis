@@ -609,42 +609,48 @@ class CallRecordsWatcher:
         return None
 
     def process_new_records(self, records: List[CallRecord]) -> int:
-        """Обработать новые записи: скачать и при необходимости отправить в Scanovich."""
-        downloaded_count = 0
+        """Обработать новые записи: скачать всё, затем отправить одним батчем в Scanovich."""
+        downloaded: List[tuple] = []  # (local_path, filename, record)
 
         for record in records:
             filename = self.generate_readable_filename(record)
             local_path = os.path.join(self.download_dir, filename)
 
-            if not self.db.is_record_downloaded(local_path):
-                self.logger.info(
-                    "🎵 Новая запись: %s — %s — %s",
-                    record.file_name, record.call_direction, record.get_duration_str(),
-                )
-
-                downloaded_path = self.download_record(record)
-                if downloaded_path:
-                    self.db.mark_record_downloaded(record, downloaded_path)
-                    downloaded_count += 1
-
-                    # Загрузка в Scanovich (если настроена)
-                    if self.uploader is not None:
-                        upload_ok = self.uploader.upload(downloaded_path, filename)
-                        self.db.mark_record_uploaded(downloaded_path, upload_ok)
-
-                        if upload_ok and self.delete_after_upload:
-                            try:
-                                os.remove(downloaded_path)
-                                self.logger.debug("Локальный файл удалён после загрузки: %s", filename)
-                            except Exception as exc:
-                                self.logger.warning("Не удалось удалить файл %s: %s", filename, exc)
-
-                    # Небольшая пауза между загрузками
-                    time.sleep(1)
-            else:
+            if self.db.is_record_downloaded(local_path):
                 self.logger.debug("Запись %s уже загружена", record.file_name)
+                continue
 
-        return downloaded_count
+            self.logger.info(
+                "🎵 Новая запись: %s — %s — %s",
+                record.file_name, record.call_direction, record.get_duration_str(),
+            )
+
+            downloaded_path = self.download_record(record)
+            if downloaded_path:
+                self.db.mark_record_downloaded(record, downloaded_path)
+                downloaded.append((downloaded_path, filename, record))
+                time.sleep(1)
+
+        if not downloaded:
+            return 0
+
+        # Загрузка в Scanovich одним батчем (если интеграция настроена)
+        if self.uploader is not None and downloaded:
+            batch_files = [(path, fname) for path, fname, _ in downloaded]
+            upload_results = self.uploader.upload_batch(batch_files)
+
+            for local_path, filename, _ in downloaded:
+                upload_ok = upload_results.get(local_path, False)
+                self.db.mark_record_uploaded(local_path, upload_ok)
+
+                if upload_ok and self.delete_after_upload:
+                    try:
+                        os.remove(local_path)
+                        self.logger.debug("Локальный файл удалён после загрузки: %s", filename)
+                    except Exception as exc:
+                        self.logger.warning("Не удалось удалить файл %s: %s", filename, exc)
+
+        return len(downloaded)
 
     def run_once(self, hours_back: Optional[int] = None) -> int:
         """Один цикл проверки и загрузки"""
