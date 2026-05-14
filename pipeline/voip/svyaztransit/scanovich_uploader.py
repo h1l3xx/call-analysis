@@ -134,19 +134,30 @@ class ScanovichUploader:
         return self._do_upload_batch([(filepath, filename)])
 
     @staticmethod
-    def _log_result(filename: str, data: dict) -> bool:
+    def _log_batch_result(files: list[tuple[str, str]], data: dict) -> dict[str, bool]:
+        """Логировать итог батч-загрузки и вернуть {filepath: успех}."""
         queued = data.get("queued", 0)
         failed = data.get("failed", 0)
         pre_no_speech = data.get("preNoSpeech", 0)
         logger.info(
-            "Scanovich bulk-upload [%s]: queued=%d, failed=%d, noSpeech=%d",
-            filename, queued, failed, pre_no_speech,
+            "Scanovich bulk-upload (%d файлов): queued=%d, failed=%d, noSpeech=%d",
+            len(files), queued, failed, pre_no_speech,
         )
+
+        # Строим маппинг filename → filepath для обратного матчинга
+        name_to_path = {fname: fpath for fpath, fname in files}
+        result_by_name: dict[str, bool] = {}
+
         for item in data.get("results", []):
             status = item.get("status", "?")
-            if status not in ("queued", "no_speech"):
-                logger.warning(
-                    "  [%s] %s — %s",
-                    status, item.get("filename"), item.get("error", ""),
-                )
-        return queued > 0
+            fname = item.get("filename", "")
+            ok = status in ("queued", "no_speech")
+            result_by_name[fname] = ok
+            if not ok:
+                logger.warning("  [%s] %s — %s", status, fname, item.get("error", ""))
+
+        # Возвращаем результат по filepath
+        out: dict[str, bool] = {}
+        for fpath, fname in files:
+            out[fpath] = result_by_name.get(fname, queued > 0)
+        return out
