@@ -80,10 +80,10 @@ class ScanovichConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="SCANOVICH_", extra="ignore")
 
-    url: Optional[str] = Field(default=None, alias="URL")
-    email: Optional[str] = Field(default=None, alias="EMAIL")
-    password: Optional[str] = Field(default=None, alias="PASSWORD")
-    delete_after_upload: bool = Field(default=False, alias="DELETE_AFTER_UPLOAD")
+    url: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    delete_after_upload: bool = False
 
     @property
     def enabled(self) -> bool:
