@@ -38,6 +38,9 @@ class DownloadConfig(BaseSettings):
         return v
 
     check_interval: int = Field(default=300, alias="CHECK_INTERVAL")
+    # Расписание: "HH:MM,HH:MM" в локальном часовом поясе контейнера (TZ env var).
+    # Если задано — CHECK_INTERVAL игнорируется.
+    schedule_times: str = Field(default="", alias="SCHEDULE_TIMES")
 
 
 class FilterConfig(BaseSettings):

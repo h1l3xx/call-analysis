@@ -144,13 +144,17 @@ services:
       app:
         condition: service_healthy
     environment:
+      TZ: ${STRANZIT_TZ:-Asia/Irkutsk}
       STRANZIT_USERNAME: ${STRANZIT_USERNAME:-}
       STRANZIT_PASSWORD: ${STRANZIT_PASSWORD:-}
       CALL_FILTER_DIRECTION: ${CALL_FILTER_DIRECTION:-any}
-      CALL_FILTER_DURATION_OP: ${CALL_FILTER_DURATION_OP:->= }
+      CALL_FILTER_DURATION_OP: ${CALL_FILTER_DURATION_OP:->=}
       CALL_FILTER_DURATION: ${CALL_FILTER_DURATION:-00:01:00}
       CALL_FILTER_START: ${CALL_FILTER_START:-today_start}
       CALL_FILTER_END: ${CALL_FILTER_END:-now}
+      # Расписание в локальном времени контейнера (TZ выше).
+      # Если пусто — используется CHECK_INTERVAL.
+      SCHEDULE_TIMES: ${SCHEDULE_TIMES:-12:00,20:00}
       CHECK_INTERVAL: ${CHECK_INTERVAL:-300}
       SCANOVICH_URL: http://app:8080
       SCANOVICH_EMAIL: ${SCANOVICH_EMAIL:-}

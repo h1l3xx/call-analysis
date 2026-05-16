@@ -172,6 +172,7 @@ class CallRecordsWatcher:
         self.download_dir = download_config.download_dir
         self.db = DatabaseManager(str(db_config.database_path))
         self.check_interval = download_config.check_interval
+        self.schedule_times = download_config.schedule_times
         self.filter_hours_back = 0  # Не используется в новой версии, оставлено для совместимости
 
         # Настройка логирования с pathname:lineno
@@ -679,43 +680,90 @@ class CallRecordsWatcher:
 
         return downloaded
 
+    # ── расписание ────────────────────────────────────────────────
+
+    def _parse_schedule(self) -> list[tuple[int, int]]:
+        """Разобрать SCHEDULE_TIMES='09:00,18:00' → [(9,0),(18,0)]."""
+        raw = self.schedule_times.strip()
+        if not raw:
+            return []
+        result = []
+        for part in raw.split(","):
+            part = part.strip()
+            try:
+                h, m = part.split(":")
+                result.append((int(h), int(m)))
+            except ValueError:
+                self.logger.warning("Неверный формат времени в SCHEDULE_TIMES: %s", part)
+        return sorted(result)
+
+    def _seconds_until_next(self, schedule: list[tuple[int, int]]) -> int:
+        """Сколько секунд до ближайшего запуска по расписанию (локальное время контейнера)."""
+        now = datetime.now()
+        today_slots = [
+            now.replace(hour=h, minute=m, second=0, microsecond=0)
+            for h, m in schedule
+        ]
+        future = [s for s in today_slots if s > now]
+        if future:
+            return max(1, int((future[0] - now).total_seconds()))
+        # Все слоты сегодня прошли — ждём до первого слота завтра
+        tomorrow_first = today_slots[0] + timedelta(days=1)
+        return max(1, int((tomorrow_first - now).total_seconds()))
+
+    # ── основной цикл ─────────────────────────────────────────────
+
     def run_continuous(self):
-        """Непрерывный режим работы с мониторингом и graceful shutdown"""
-        self.logger.info("🚀 Запуск непрерывного режима (Ctrl+C для остановки)")
-        self.logger.info(f"Интервал проверки: {self.check_interval} секунд")
+        """Непрерывный режим работы с мониторингом и graceful shutdown."""
+        schedule = self._parse_schedule()
+
+        if schedule:
+            slots_str = ", ".join(f"{h:02d}:{m:02d}" for h, m in schedule)
+            self.logger.info(
+                "🚀 Запуск по расписанию: %s (часовой пояс контейнера: %s)",
+                slots_str, datetime.now().astimezone().tzname(),
+            )
+        else:
+            self.logger.info(
+                "🚀 Запуск непрерывного режима, интервал: %d с", self.check_interval,
+            )
 
         try:
             while not self.should_shutdown_gracefully():
-                # Выполнить плановое обслуживание
                 self.perform_maintenance()
 
-                # Проверить ресурсы перед запуском
                 disk_info = self.check_disk_space()
-                if disk_info['free_gb'] < 1.0:  # Менее 1GB свободного места
-                    self.logger.warning(f"⚠️ Мало места на диске: {disk_info['free_gb']:.1f}GB свободно")
-                    if disk_info['free_gb'] < 0.5:  # Критически мало места
-                        self.logger.error("🚨 Критически мало места на диске, приостанавливаю работу")
-                        time.sleep(300)  # Ждем 5 минут
-                        continue
+                if disk_info['free_gb'] < 0.5:
+                    self.logger.error("🚨 Критически мало места на диске, жду 5 минут")
+                    time.sleep(300)
+                    continue
+                elif disk_info['free_gb'] < 1.0:
+                    self.logger.warning("⚠️ Мало места на диске: %.1f GB", disk_info['free_gb'])
 
-                downloaded = self.run_once(
-                    hours_back=self.filter_hours_back or None
-                )
+                downloaded = self.run_once(hours_back=self.filter_hours_back or None)
 
                 stats = self.db.get_stats()
-                self.logger.info(f"📈 Всего загружено: {stats['total_downloaded']} файлов")
+                self.logger.info("📈 Всего загружено: %d файлов", stats['total_downloaded'])
 
-                self.logger.info(f"⏰ Ожидание {self.check_interval} секунд до следующей проверки...")
-                time.sleep(self.check_interval)
+                if schedule:
+                    wait_sec = self._seconds_until_next(schedule)
+                    next_dt = datetime.now() + timedelta(seconds=wait_sec)
+                    self.logger.info(
+                        "⏰ Следующий запуск: %s (через %d мин)",
+                        next_dt.strftime("%d.%m %H:%M"), wait_sec // 60,
+                    )
+                    time.sleep(wait_sec)
+                else:
+                    self.logger.info("⏰ Ожидание %d секунд...", self.check_interval)
+                    time.sleep(self.check_interval)
 
         except KeyboardInterrupt:
             self.logger.info("🛑 Остановка watcher (Ctrl+C)")
         except Exception as e:
-            self.logger.error(f"❌ Критическая ошибка: {e}")
-            # Попробовать отправить уведомление об ошибке (если настроено)
+            self.logger.error("❌ Критическая ошибка: %s", e)
             try:
                 self._send_error_notification(str(e))
-            except:
+            except Exception:
                 pass
 
         self.logger.info("👋 Watcher завершен")
