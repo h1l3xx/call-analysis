@@ -37,23 +37,23 @@ class DownloadConfig(BaseSettings):
             return path
         return v
 
-    check_interval: int = Field(default=300, alias="CHECK_INTERVAL")
+    check_interval: int = 300
     # Расписание: "HH:MM,HH:MM" в локальном часовом поясе контейнера (TZ env var).
     # Если задано — CHECK_INTERVAL игнорируется.
-    schedule_times: str = Field(default="", alias="SCHEDULE_TIMES")
+    schedule_times: str = ""
 
 
 class FilterConfig(BaseSettings):
     """Call record filters."""
 
     model_config = SettingsConfigDict(env_prefix="CALL_FILTER_", extra="ignore")
-    start: str = Field(default="today_start", alias="START")
-    end: str = Field(default="now", alias="END")
-    direction: str = Field(default="incoming", alias="DIRECTION")
-    duration_op: str = Field(default=">=", alias="DURATION_OP")
-    duration: str = Field(default="00:03:00", alias="DURATION")
-    records_per_page: int = Field(default=50, alias="RECORDS_PER_PAGE")
-    phone_number: Optional[str] = Field(default=None, alias="PHONE_NUMBER")
+    start: str = "today_start"
+    end: str = "now"
+    direction: str = "any"
+    duration_op: str = ">="
+    duration: str = "00:00:30"
+    records_per_page: int = 50
+    phone_number: Optional[str] = None
 
 
 class DatabaseConfig(BaseSettings):
