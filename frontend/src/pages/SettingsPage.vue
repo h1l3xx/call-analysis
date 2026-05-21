@@ -62,7 +62,7 @@ async function refreshStatus() {
 </script>
 
 <template>
-  <div class="space-y-6 max-w-2xl">
+  <div class="space-y-6">
     <h1 class="text-2xl font-bold text-gray-900">Настройки</h1>
 
     <!-- Profile info -->
