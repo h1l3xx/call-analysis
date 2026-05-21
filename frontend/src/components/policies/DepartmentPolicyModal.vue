@@ -139,7 +139,7 @@ function onResetAll() {
                 <label class="block text-xs text-gray-500 mb-1">Скрипт</label>
                 <select
                   v-model="localScript[d.value]"
-                  class="w-full appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  class="w-full bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                 >
                   <option value="">Без скрипта</option>
                   <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -149,7 +149,7 @@ function onResetAll() {
                 <label class="block text-xs text-gray-500 mb-1">Оценка</label>
                 <select
                   v-model="localTemplate[d.value]"
-                  class="w-full appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  class="w-full bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                 >
                   <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
                 </select>

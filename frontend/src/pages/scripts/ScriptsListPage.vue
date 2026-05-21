@@ -64,7 +64,7 @@ async function handleCreate() {
     <div class="flex gap-3">
       <select
         v-model="activeFilter"
-        class="appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+        class="bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
       >
         <option value="">Все</option>
         <option value="true">Активные</option>

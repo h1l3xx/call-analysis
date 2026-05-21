@@ -188,7 +188,7 @@ function onDragEnd() {
       <div class="flex gap-3 flex-wrap items-center">
         <select
           v-model="criterion.groupType"
-          class="appearance-auto bg-white px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-primary-500 outline-none"
+          class="bg-white px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-primary-500 outline-none"
         >
           <option value="required">Обязательный</option>
           <option value="optional">Опциональный</option>

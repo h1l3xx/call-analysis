@@ -75,7 +75,7 @@ async function handleUpload() {
           <label class="block text-sm font-medium text-gray-700 mb-1.5">Менеджер</label>
           <select
             v-model="selectedManager"
-            class="appearance-auto bg-white w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+            class="bg-white w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
           >
             <option v-for="m in managers" :key="m.id" :value="m.id">{{ m.fullName }}</option>
           </select>
@@ -85,7 +85,7 @@ async function handleUpload() {
           <label class="block text-sm font-medium text-gray-700 mb-1.5">Скрипт оценки</label>
           <select
             v-model="selectedScript"
-            class="appearance-auto bg-white w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+            class="bg-white w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
           >
             <option v-for="s in scripts" :key="s.id" :value="s.id">{{ s.name }}</option>
           </select>

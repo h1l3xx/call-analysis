@@ -630,7 +630,7 @@ function openCallsModal(title: string, callIds: string[]) {
             <label class="block text-sm font-medium text-gray-700 mb-1">Отдел</label>
             <select
               v-model="exportDepartment"
-              class="w-full appearance-auto bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+              class="w-full bg-white px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
             >
               <option value="">Все отделы</option>
               <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
