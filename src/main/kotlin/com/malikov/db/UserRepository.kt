@@ -100,11 +100,16 @@ class UserRepository {
 
     fun searchByTenant(tenantId: UUID, query: String, role: String? = null, limit: Int = 10): List<UserRow> = transaction {
         val q = "%${query.lowercase().trim()}%"
+        // Users.role — тип public.user_role (ENUM), поэтому сравниваем через cast в text
+        val roleFilter: Op<Boolean> = if (role != null)
+            Users.role.castTo<String>(TextColumnType()) eq role
+        else
+            Op.TRUE
         Users.selectAll()
             .where {
                 (Users.tenantId eq tenantId) and
                 (Users.isActive eq true) and
-                (role?.let { Users.role eq it } ?: Op.TRUE) and
+                roleFilter and
                 ((Users.fullName.lowerCase() like q) or (Users.email.lowerCase() like q))
             }
             .orderBy(Users.fullName)
