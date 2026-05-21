@@ -38,7 +38,7 @@ function onSearchInput() {
   searchTimer = setTimeout(async () => {
     searchLoading.value = true
     try {
-      const { data } = await usersApi.search(q, 'TEAM_LEAD')
+      const { data } = await usersApi.search(q)
       searchResults.value = data
       showDropdown.value = data.length > 0
     } finally {
