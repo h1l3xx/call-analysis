@@ -193,20 +193,15 @@ async function removeLead(deptId: string, userId: string) {
               class="w-full text-left px-3 py-2 hover:bg-purple-50 transition-colors flex items-center justify-between gap-2"
               @mousedown.prevent="selectUser(u)"
             >
-              <div>
-                <p class="text-sm font-medium text-gray-900">{{ u.fullName }}</p>
-                <p class="text-xs text-gray-500">{{ u.email }}</p>
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">{{ u.fullName }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ u.email }}</p>
               </div>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 shrink-0">
-                Тимлид
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 shrink-0">
+                {{ roleLabel(u.role) }}
               </span>
             </button>
           </div>
-
-          <!-- Выбран пользователь -->
-          <p v-if="selectedUser" class="mt-1 text-xs text-purple-600">
-            ✓ {{ selectedUser.email }}
-          </p>
         </div>
 
         <button
