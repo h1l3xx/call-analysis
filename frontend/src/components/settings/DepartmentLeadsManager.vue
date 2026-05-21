@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { managersApi, departmentLeadsApi, usersApi } from '@/api'
 import type { ManagerResponse } from '@/types'
 import type { DepartmentLeadResponse, UserSearchResponse } from '@/api/telegram'
-import { UserPlus, Trash2, Building2, Loader2, Search, X } from 'lucide-vue-next'
+import { UserPlus, Trash2, Building2, Loader2, Search, X, ChevronDown } from 'lucide-vue-next'
 
 interface Department {
   id: string
@@ -153,13 +153,16 @@ async function removeLead(deptId: string, userId: string) {
         <!-- Отдел -->
         <div class="flex-1 min-w-[150px]">
           <label class="block text-xs text-gray-500 mb-1">Отдел</label>
-          <select
-            v-model="selectedDept"
-            class="appearance-auto bg-white w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500 outline-none"
-          >
-            <option value="">Выберите отдел</option>
-            <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
+          <div class="relative">
+            <select
+              v-model="selectedDept"
+              class="appearance-none bg-white w-full pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500 outline-none"
+            >
+              <option value="">Выберите отдел</option>
+              <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
+            </select>
+            <ChevronDown class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          </div>
         </div>
 
         <!-- Поиск пользователя (autocomplete) -->
