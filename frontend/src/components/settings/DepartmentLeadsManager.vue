@@ -67,6 +67,16 @@ function onBlur() {
 
 onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
+function roleLabel(role: string): string {
+  const map: Record<string, string> = {
+    CLIENT_ADMIN: 'Администратор',
+    TEAM_LEAD:    'Тимлид',
+    MANAGER:      'Менеджер',
+    SUPERADMIN:   'Суперадмин',
+  }
+  return map[role] ?? role
+}
+
 // ── Data loading ───────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
