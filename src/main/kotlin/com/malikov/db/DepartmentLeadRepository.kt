@@ -15,6 +15,16 @@ data class DepartmentLeadRow(
 
 class DepartmentLeadRepository {
 
+    fun listAll(schema: String): List<DepartmentLeadRow> = transaction {
+        val dl = TDepartmentLeads(schema)
+        val d = TDepartments(schema)
+        dl.join(Users, JoinType.INNER, dl.userId, Users.id)
+            .join(d, JoinType.INNER, dl.departmentId, d.id)
+            .selectAll()
+            .orderBy(d.name)
+            .map { it.toRow(dl, d) }
+    }
+
     fun listByDepartment(schema: String, departmentId: UUID): List<DepartmentLeadRow> = transaction {
         val dl = TDepartmentLeads(schema)
         val d = TDepartments(schema)

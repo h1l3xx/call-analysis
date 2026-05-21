@@ -61,6 +61,30 @@ fun Route.telegramRoutes(
 }
 
 fun Route.departmentLeadRoutes(deptLeadRepo: DepartmentLeadRepository) {
+
+    // Batch: все лиды всех отделов одним запросом
+    get("/departments/leads") {
+        val principal = call.principal<UserPrincipal>()!!
+        val schema = principal.schema ?: run {
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "No tenant"))
+            return@get
+        }
+        if (!principal.roleEnum.canAccess(Role.CLIENT_ADMIN, Role.TEAM_LEAD)) {
+            call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Access denied"))
+            return@get
+        }
+        val leads = deptLeadRepo.listAll(schema)
+        call.respond(HttpStatusCode.OK, leads.map {
+            DepartmentLeadResponse(
+                userId       = it.userId.toString(),
+                fullName     = it.userFullName,
+                email        = it.userEmail,
+                departmentId = it.departmentId.toString(),
+                departmentName = it.departmentName,
+            )
+        })
+    }
+
     route("/departments/{departmentId}/leads") {
 
         get {

@@ -44,6 +44,9 @@ export const usersApi = {
 }
 
 export const departmentLeadsApi = {
+  listAll() {
+    return client.get<DepartmentLeadResponse[]>('/api/v1/departments/leads')
+  },
   list(departmentId: string) {
     return client.get<DepartmentLeadResponse[]>(`/api/v1/departments/${departmentId}/leads`)
   },

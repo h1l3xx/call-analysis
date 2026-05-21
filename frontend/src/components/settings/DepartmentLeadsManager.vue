@@ -81,14 +81,15 @@ onMounted(async () => {
     }
     departments.value = [...deptMap.entries()].map(([id, name]) => ({ id, name }))
 
-    for (const dept of departments.value) {
-      try {
-        const { data: leads } = await departmentLeadsApi.list(dept.id)
-        leadsByDept.value[dept.id] = leads
-      } catch {
-        leadsByDept.value[dept.id] = []
-      }
+    // Один запрос вместо N (по одному на каждый отдел)
+    const { data: allLeads } = await departmentLeadsApi.listAll()
+    const grouped: Record<string, DepartmentLeadResponse[]> = {}
+    for (const dept of departments.value) grouped[dept.id] = []
+    for (const lead of allLeads) {
+      if (!grouped[lead.departmentId]) grouped[lead.departmentId] = []
+      grouped[lead.departmentId].push(lead)
     }
+    leadsByDept.value = grouped
   } finally {
     loading.value = false
   }
@@ -101,7 +102,7 @@ async function assignLead() {
   try {
     await departmentLeadsApi.assign(selectedDept.value, selectedUser.value.id)
     const { data: leads } = await departmentLeadsApi.list(selectedDept.value)
-    leadsByDept.value[selectedDept.value] = leads
+    leadsByDept.value = { ...leadsByDept.value, [selectedDept.value]: leads }
     clearUser()
   } finally {
     assigning.value = false
