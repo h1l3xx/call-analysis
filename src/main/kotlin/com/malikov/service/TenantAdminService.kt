@@ -4,6 +4,7 @@ import com.malikov.config.NotFoundException
 import com.malikov.db.TenantAdminRepository
 import com.malikov.db.TenantRow
 import com.malikov.db.TenantUsageRow
+import com.malikov.db.UserRow
 import com.malikov.dto.*
 import at.favre.lib.crypto.bcrypt.BCrypt
 import java.util.UUID
