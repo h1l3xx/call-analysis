@@ -105,27 +105,26 @@ class BatchRepository {
     }
 
     /** Пересчитывает callTypeStats из реальных записей звонков (нужно для чанковых загрузок).
-     *  Считаем только "завершённые" звонки (done + transcribed_only + no_speech + failed),
-     *  чтобы цифры совпадали с тем, что LLM-summary видит как total_calls.
+     *  Считаем ВСЕ звонки батча — callType проставляется из имени файла при создании
+     *  и не меняется в процессе обработки. Фильтрация только по finished-статусам
+     *  приводила к тому, что сразу после загрузки (все звонки в статусе queued)
+     *  статистика обнулялась и никогда не восстанавливалась.
      */
     fun refreshTypeStats(schema: String, batchId: UUID) = transaction {
         val cl = TCalls(schema)
-        // Считаем все завершённые звонки — сумма типов должна совпадать с totalCalls.
-        // LLM summary показывает свой total_calls только по done-звонкам — это отдельное число.
-        val finishedStatuses = listOf("done", "transcribed_only", "no_speech", "failed")
         val rows = cl.select(cl.callType, cl.callType.count())
-            .where { (cl.batchId eq batchId) and (cl.status inList finishedStatuses) }
+            .where { cl.batchId eq batchId }
             .groupBy(cl.callType)
             .associate { (it[cl.callType] ?: "unknown") to it[cl.callType.count()].toInt() }
         val knownSum = (rows["internal"] ?: 0) +
             (rows["external_incoming"] ?: 0) + (rows["external"] ?: 0) +
             (rows["external_outgoing"] ?: 0)
-        val totalFinished = rows.values.sum()
+        val total = rows.values.sum()
         val stats = CallTypeStatsJson(
             internal         = rows["internal"] ?: 0,
             externalIncoming = rows["external_incoming"] ?: (rows["external"] ?: 0),
             externalOutgoing = rows["external_outgoing"] ?: 0,
-            unknown          = totalFinished - knownSum,
+            unknown          = total - knownSum,
         )
         val b = TBatches(schema)
         b.update({ b.id eq batchId }) { it[b.callTypeStats] = json.encodeToString(stats) }
