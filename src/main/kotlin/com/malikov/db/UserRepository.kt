@@ -102,7 +102,7 @@ class UserRepository {
         val q = "%${query.lowercase().trim()}%"
         // Users.role — тип public.user_role (ENUM), поэтому сравниваем через cast в text
         val roleFilter: Op<Boolean> = if (role != null)
-            Users.role.castTo<String>(TextColumnType()) eq role
+            Op.build { Users.role.castTo<String>(TextColumnType()) eq role }
         else
             Op.TRUE
         Users.selectAll()
