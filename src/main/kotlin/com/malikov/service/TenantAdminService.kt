@@ -31,11 +31,24 @@ class TenantAdminService(private val repo: TenantAdminRepository) {
         return tenant.toResponse()
     }
 
+    fun listUsers(tenantId: UUID): List<TenantUserResponse> =
+        repo.listUsers(tenantId).map { it.toUserResponse() }
+
     fun getUsage(tenantId: UUID): TenantUsageResponse {
         val usage = repo.getUsage(tenantId)
             ?: throw NotFoundException("Tenant or subscription not found")
         return usage.toUsageResponse()
     }
+
+    private fun UserRow.toUserResponse() = TenantUserResponse(
+        id           = id.toString(),
+        email        = email,
+        fullName     = fullName,
+        role         = role,
+        isActive     = isActive,
+        createdAt    = createdAt,
+        lastActiveAt = lastActiveAt,
+    )
 
     private fun TenantRow.toResponse() = TenantResponse(
         id        = id.toString(),

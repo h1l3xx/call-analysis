@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Plus, ChevronLeft, ChevronRight, Eye, X } from 'lucide-vue-next'
+import { Plus, ChevronLeft, ChevronRight, Eye, X, Users } from 'lucide-vue-next'
 import { adminApi } from '@/api'
-import type { TenantResponse, TenantUsageResponse } from '@/types'
+import type { TenantResponse, TenantUsageResponse, TenantUserResponse } from '@/types'
 import { useFormatters } from '@/composables/useFormatters'
 import CreateTenantModal from '@/components/admin/CreateTenantModal.vue'
 import UsageCard from '@/components/admin/UsageCard.vue'
@@ -15,6 +15,7 @@ const page = ref(1)
 const totalPages = ref(1)
 const showCreate = ref(false)
 
+// ── Usage ──────────────────────────────────────────────────────────────────
 const selectedUsage = ref<TenantUsageResponse | null>(null)
 const selectedTenantId = ref<string | null>(null)
 const usageLoading = ref(false)
@@ -42,6 +43,51 @@ async function viewUsage(tenantId: string) {
   }
 }
 
+// ── Users ──────────────────────────────────────────────────────────────────
+const usersMap = ref<Record<string, TenantUserResponse[]>>({})
+const usersLoadingId = ref<string | null>(null)
+const expandedUsersId = ref<string | null>(null)
+
+async function toggleUsers(tenantId: string) {
+  if (expandedUsersId.value === tenantId) {
+    expandedUsersId.value = null
+    return
+  }
+  expandedUsersId.value = tenantId
+  if (usersMap.value[tenantId]) return
+  usersLoadingId.value = tenantId
+  try {
+    const { data } = await adminApi.getTenantUsers(tenantId)
+    usersMap.value[tenantId] = data
+  } finally {
+    usersLoadingId.value = null
+  }
+}
+
+function roleLabel(role: string): string {
+  const map: Record<string, string> = {
+    CLIENT_ADMIN: 'Администратор',
+    TEAM_LEAD:    'Тим-лид',
+    MANAGER:      'Менеджер',
+    SUPERADMIN:   'Суперадмин',
+  }
+  return map[role] ?? role
+}
+
+function lastActiveLabel(ts: number | null): string {
+  if (!ts) return '—'
+  const diff = Date.now() - ts
+  const m = Math.floor(diff / 60_000)
+  if (m < 1)  return 'только что'
+  if (m < 60) return `${m} мин. назад`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} ч. назад`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d} дн. назад`
+  return formatDate(ts)
+}
+
+// ── Tenants list ───────────────────────────────────────────────────────────
 async function fetchTenants() {
   loading.value = true
   try {
@@ -79,7 +125,7 @@ onMounted(fetchTenants)
             <th class="text-left px-5 py-3 font-medium text-gray-600">Схема</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Статус</th>
             <th class="text-left px-5 py-3 font-medium text-gray-600">Создан</th>
-            <th class="text-left px-5 py-3 font-medium text-gray-600"></th>
+            <th class="px-5 py-3"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -107,21 +153,89 @@ onMounted(fetchTenants)
                 </span>
               </td>
               <td class="px-5 py-3 text-gray-500">{{ formatDate(t.createdAt) }}</td>
-              <td class="px-5 py-3">
-                <button
-                  :class="[
-                    'p-1.5 rounded transition-colors',
-                    selectedTenantId === t.id
-                      ? 'text-primary-700 bg-primary-100'
-                      : 'text-primary-600 hover:text-primary-700 hover:bg-gray-100',
-                  ]"
-                  @click="viewUsage(t.id)"
-                >
-                  <Eye v-if="selectedTenantId !== t.id" class="w-4 h-4" />
-                  <X v-else class="w-4 h-4" />
-                </button>
+              <td class="px-3 py-3">
+                <div class="flex items-center gap-1">
+                  <!-- Пользователи -->
+                  <button
+                    :class="[
+                      'p-1.5 rounded transition-colors',
+                      expandedUsersId === t.id
+                        ? 'text-indigo-700 bg-indigo-100'
+                        : 'text-gray-400 hover:text-indigo-600 hover:bg-gray-100',
+                    ]"
+                    title="Пользователи"
+                    @click="toggleUsers(t.id)"
+                  >
+                    <Users class="w-4 h-4" />
+                  </button>
+                  <!-- Использование -->
+                  <button
+                    :class="[
+                      'p-1.5 rounded transition-colors',
+                      selectedTenantId === t.id
+                        ? 'text-primary-700 bg-primary-100'
+                        : 'text-primary-600 hover:text-primary-700 hover:bg-gray-100',
+                    ]"
+                    title="Использование"
+                    @click="viewUsage(t.id)"
+                  >
+                    <Eye v-if="selectedTenantId !== t.id" class="w-4 h-4" />
+                    <X v-else class="w-4 h-4" />
+                  </button>
+                </div>
               </td>
             </tr>
+
+            <!-- Строка с пользователями -->
+            <tr v-if="expandedUsersId === t.id">
+              <td colspan="6" class="p-0">
+                <div class="px-5 py-4 bg-indigo-50/40 border-t border-indigo-100 animate-slideDown">
+                  <div v-if="usersLoadingId === t.id" class="py-2 text-center text-gray-400 text-sm">Загрузка...</div>
+                  <template v-else-if="usersMap[t.id]">
+                    <p v-if="!usersMap[t.id].length" class="text-sm text-gray-400 py-1">Нет пользователей</p>
+                    <table v-else class="w-full text-xs">
+                      <thead>
+                        <tr class="text-gray-500 border-b border-indigo-100">
+                          <th class="text-left pb-2 pr-4 font-medium">Имя</th>
+                          <th class="text-left pb-2 pr-4 font-medium">Email</th>
+                          <th class="text-left pb-2 pr-4 font-medium">Роль</th>
+                          <th class="text-left pb-2 pr-4 font-medium">Статус</th>
+                          <th class="text-left pb-2 font-medium">Последняя активность</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-indigo-100/50">
+                        <tr v-for="u in usersMap[t.id]" :key="u.id" class="hover:bg-indigo-50/50">
+                          <td class="py-1.5 pr-4 font-medium text-gray-800">{{ u.fullName }}</td>
+                          <td class="py-1.5 pr-4 text-gray-500">{{ u.email }}</td>
+                          <td class="py-1.5 pr-4">
+                            <span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                              {{ roleLabel(u.role) }}
+                            </span>
+                          </td>
+                          <td class="py-1.5 pr-4">
+                            <span :class="u.isActive ? 'text-green-600' : 'text-gray-400'">
+                              {{ u.isActive ? 'Активен' : 'Неактивен' }}
+                            </span>
+                          </td>
+                          <td class="py-1.5">
+                            <span
+                              :class="[
+                                u.lastActiveAt ? 'text-gray-700' : 'text-gray-400',
+                              ]"
+                              :title="u.lastActiveAt ? formatDate(u.lastActiveAt) : undefined"
+                            >
+                              {{ lastActiveLabel(u.lastActiveAt) }}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </template>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Строка с использованием -->
             <tr v-if="selectedTenantId === t.id">
               <td colspan="6" class="p-0">
                 <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 animate-slideDown">
@@ -168,6 +282,6 @@ onMounted(fetchTenants)
 }
 @keyframes slideDown {
   from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 200px; }
+  to   { opacity: 1; max-height: 400px; }
 }
 </style>

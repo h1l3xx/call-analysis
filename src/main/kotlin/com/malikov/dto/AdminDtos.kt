@@ -32,3 +32,14 @@ data class TenantUsageResponse(
     val periodStart: String,
     val periodEnd: String,
 )
+
+@Serializable
+data class TenantUserResponse(
+    val id: String,
+    val email: String,
+    val fullName: String,
+    val role: String,
+    val isActive: Boolean,
+    val createdAt: Long,
+    val lastActiveAt: Long?,
+)

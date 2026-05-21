@@ -14,6 +14,7 @@ object Users : Table("public.users") {
     val telegramChatId = long("telegram_chat_id").nullable()
     val createdAt      = long("created_at")
     val updatedAt      = long("updated_at")
+    val lastActiveAt   = long("last_active_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

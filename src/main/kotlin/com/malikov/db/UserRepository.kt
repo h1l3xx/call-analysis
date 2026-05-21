@@ -13,6 +13,8 @@ data class UserRow(
     val role:         String,
     val isActive:     Boolean,
     val dbSchema:     String?,
+    val createdAt:    Long = 0L,
+    val lastActiveAt: Long? = null,
 )
 
 data class RefreshTokenRow(
@@ -96,6 +98,12 @@ class UserRepository {
         }
     }
 
+    fun touchLastActive(userId: UUID) = transaction {
+        Users.update({ Users.id eq userId }) {
+            it[Users.lastActiveAt] = System.currentTimeMillis()
+        }
+    }
+
     fun revokeAllUserTokens(userId: UUID) = transaction {
         RefreshTokens.update({
             (RefreshTokens.userId eq userId) and (RefreshTokens.revokedAt.isNull())
@@ -113,5 +121,7 @@ class UserRepository {
         role         = this[Users.role],
         isActive     = this[Users.isActive],
         dbSchema     = dbSchema,
+        createdAt    = this[Users.createdAt],
+        lastActiveAt = this[Users.lastActiveAt],
     )
 }

@@ -9,7 +9,10 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.UUID
 
 fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
 
@@ -42,6 +45,17 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
         }
 
         authenticate("jwt") {
+
+            // Обновляем lastActiveAt при каждом аутентифицированном запросе.
+            // Запускается асинхронно, не блокирует обработку запроса.
+            intercept(ApplicationCallPipeline.Call) {
+                val userId = call.principal<UserPrincipal>()?.userId
+                if (userId != null) {
+                    launch(Dispatchers.IO) {
+                        runCatching { services.userRepository.touchLastActive(UUID.fromString(userId)) }
+                    }
+                }
+            }
 
             route("/api/v1") {
                 managerRoutes(services.managerService, services.managerEvaluationService)

@@ -1,5 +1,5 @@
 import client from './client'
-import type { PaginatedResponse, TenantResponse, TenantUsageResponse, CreateTenantRequest } from '@/types'
+import type { PaginatedResponse, TenantResponse, TenantUsageResponse, TenantUserResponse, CreateTenantRequest } from '@/types'
 
 export const adminApi = {
   listTenants(params: { page?: number; pageSize?: number } = {}) {
@@ -10,5 +10,8 @@ export const adminApi = {
   },
   getTenantUsage(tenantId: string) {
     return client.get<TenantUsageResponse>(`/api/v1/admin/tenants/${tenantId}/usage`)
+  },
+  getTenantUsers(tenantId: string) {
+    return client.get<TenantUserResponse[]>(`/api/v1/admin/tenants/${tenantId}/users`)
   },
 }

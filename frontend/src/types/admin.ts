@@ -25,3 +25,13 @@ export interface TenantUsageResponse {
   periodStart: string
   periodEnd: string
 }
+
+export interface TenantUserResponse {
+  id: string
+  email: string
+  fullName: string
+  role: string
+  isActive: boolean
+  createdAt: number
+  lastActiveAt: number | null
+}

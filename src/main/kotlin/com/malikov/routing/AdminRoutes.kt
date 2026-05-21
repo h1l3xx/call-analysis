@@ -26,5 +26,10 @@ fun Route.adminRoutes(service: TenantAdminService) {
             val tenantId = pathUuid("id")
             call.respond(service.getUsage(tenantId))
         }
+
+        get("/{id}/users") {
+            val tenantId = pathUuid("id")
+            call.respond(service.listUsers(tenantId))
+        }
     }
 }

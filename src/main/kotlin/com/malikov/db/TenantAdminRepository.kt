@@ -4,6 +4,19 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 
+private fun ResultRow.toUserRow() = UserRow(
+    id           = this[Users.id],
+    tenantId     = this[Users.tenantId],
+    email        = this[Users.email],
+    passwordHash = this[Users.passwordHash],
+    fullName     = this[Users.fullName],
+    role         = this[Users.role],
+    isActive     = this[Users.isActive],
+    dbSchema     = null,
+    createdAt    = this[Users.createdAt],
+    lastActiveAt = this[Users.lastActiveAt],
+)
+
 object Plans : Table("public.plans") {
     val id             = uuid("id").autoGenerate()
     val name           = text("name")
@@ -103,6 +116,14 @@ class TenantAdminRepository {
             it[Users.createdAt]    = System.currentTimeMillis()
             it[Users.updatedAt]    = System.currentTimeMillis()
         }[Users.id]
+    }
+
+    fun listUsers(tenantId: UUID): List<UserRow> = transaction {
+        Users
+            .selectAll()
+            .where { Users.tenantId eq tenantId }
+            .orderBy(Users.lastActiveAt, SortOrder.DESC_NULLS_LAST)
+            .map { it.toUserRow() }
     }
 
     fun getUsage(tenantId: UUID): TenantUsageRow? = transaction {
