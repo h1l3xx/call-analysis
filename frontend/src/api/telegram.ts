@@ -1,5 +1,12 @@
 import client from './client'
 
+export interface UserSearchResponse {
+  id: string
+  fullName: string
+  email: string
+  role: string
+}
+
 export interface LinkCodeResponse {
   code: string
   ttlMinutes: number
@@ -27,6 +34,12 @@ export const telegramApi = {
   },
   unlink() {
     return client.delete('/api/v1/telegram/unlink')
+  },
+}
+
+export const usersApi = {
+  search(q: string, role?: string) {
+    return client.get<UserSearchResponse[]>('/api/v1/users/search', { params: { q, role } })
   },
 }
 

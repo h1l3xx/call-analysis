@@ -3,7 +3,9 @@ package com.malikov.routing
 import com.malikov.auth.Role
 import com.malikov.config.ForbiddenException
 import com.malikov.config.NotFoundException
+import com.malikov.db.UserRepository
 import com.malikov.dto.AddPhoneRequest
+import com.malikov.dto.UserSearchResponse
 import com.malikov.service.ManagerEvaluationService
 import com.malikov.service.ManagerService
 import io.ktor.http.*
@@ -13,7 +15,31 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.util.UUID
 
-fun Route.managerRoutes(service: ManagerService, evaluationService: ManagerEvaluationService? = null) {
+fun Route.managerRoutes(service: ManagerService, evaluationService: ManagerEvaluationService? = null, userRepository: UserRepository? = null) {
+    // ── User search (для autocomplete в назначении тимлидов и т.п.) ──────────
+    route("/users") {
+        get("/search") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val q = call.parameters["q"]?.trim() ?: ""
+            val role = call.parameters["role"]
+            if (q.length < 2) {
+                call.respond(emptyList<UserSearchResponse>())
+                return@get
+            }
+            val repo = userRepository ?: run {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "User repository unavailable"))
+                return@get
+            }
+            val tenantId = UUID.fromString(p.tenantId ?: run {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Tenant not found"))
+                return@get
+            })
+            val results = repo.searchByTenant(tenantId, q, role)
+                .map { UserSearchResponse(it.id.toString(), it.fullName, it.email, it.role) }
+            call.respond(results)
+        }
+    }
+
     route("/managers") {
 
         get {

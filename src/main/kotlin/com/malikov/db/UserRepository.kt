@@ -98,6 +98,20 @@ class UserRepository {
         }
     }
 
+    fun searchByTenant(tenantId: UUID, query: String, role: String? = null, limit: Int = 10): List<UserRow> = transaction {
+        val q = "%${query.lowercase().trim()}%"
+        Users.selectAll()
+            .where {
+                (Users.tenantId eq tenantId) and
+                (Users.isActive eq true) and
+                (role?.let { Users.role eq it } ?: Op.TRUE) and
+                ((Users.fullName.lowerCase() like q) or (Users.email.lowerCase() like q))
+            }
+            .orderBy(Users.fullName)
+            .limit(limit)
+            .map { it.toUserRow(null) }
+    }
+
     fun touchLastActive(userId: UUID) = transaction {
         Users.update({ Users.id eq userId }) {
             it[Users.lastActiveAt] = System.currentTimeMillis()

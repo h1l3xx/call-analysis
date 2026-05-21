@@ -58,7 +58,7 @@ fun Application.configureRouting(config: AppConfig, services: ServiceRegistry) {
             }
 
             route("/api/v1") {
-                managerRoutes(services.managerService, services.managerEvaluationService)
+                managerRoutes(services.managerService, services.managerEvaluationService, services.userRepository)
                 scriptRoutes(services.scriptService)
                 callRoutes(services.callService, services.audioStorageService, services.batchExportService, services.batchProcessingService)
                 batchRoutes(services.batchRepository, services.callRepository, services.managerRepository, services.batchSummaryService, services.batchExportService, services.callService)

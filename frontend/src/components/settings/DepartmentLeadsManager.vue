@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { managersApi, departmentLeadsApi } from '@/api'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { managersApi, departmentLeadsApi, usersApi } from '@/api'
 import type { ManagerResponse } from '@/types'
-import type { DepartmentLeadResponse } from '@/api/telegram'
-import { UserPlus, Trash2, Building2, Loader2 } from 'lucide-vue-next'
+import type { DepartmentLeadResponse, UserSearchResponse } from '@/api/telegram'
+import { UserPlus, Trash2, Building2, Loader2, Search, X } from 'lucide-vue-next'
 
 interface Department {
   id: string
@@ -13,13 +13,61 @@ interface Department {
 const loading = ref(true)
 const departments = ref<Department[]>([])
 const leadsByDept = ref<Record<string, DepartmentLeadResponse[]>>({})
-const teamLeads = ref<ManagerResponse[]>([])
 
 const selectedDept = ref<string>('')
-const selectedUser = ref<string>('')
 const assigning = ref(false)
 const removing = ref<string | null>(null)
 
+// ── User search / autocomplete ─────────────────────────────────────────────
+const searchQuery = ref('')
+const searchResults = ref<UserSearchResponse[]>([])
+const selectedUser = ref<UserSearchResponse | null>(null)
+const searchLoading = ref(false)
+const showDropdown = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+function onSearchInput() {
+  selectedUser.value = null
+  if (searchTimer) clearTimeout(searchTimer)
+  const q = searchQuery.value.trim()
+  if (q.length < 2) {
+    searchResults.value = []
+    showDropdown.value = false
+    return
+  }
+  searchTimer = setTimeout(async () => {
+    searchLoading.value = true
+    try {
+      const { data } = await usersApi.search(q, 'TEAM_LEAD')
+      searchResults.value = data
+      showDropdown.value = data.length > 0
+    } finally {
+      searchLoading.value = false
+    }
+  }, 250)
+}
+
+function selectUser(u: UserSearchResponse) {
+  selectedUser.value = u
+  searchQuery.value = u.fullName
+  showDropdown.value = false
+}
+
+function clearUser() {
+  selectedUser.value = null
+  searchQuery.value = ''
+  searchResults.value = []
+  showDropdown.value = false
+}
+
+function onBlur() {
+  // Небольшая задержка, чтобы клик по опции успел сработать
+  setTimeout(() => { showDropdown.value = false }, 150)
+}
+
+onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
+
+// ── Data loading ───────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
     const { data } = await managersApi.list({ pageSize: 1000 })
@@ -46,14 +94,15 @@ onMounted(async () => {
   }
 })
 
+// ── Actions ────────────────────────────────────────────────────────────────
 async function assignLead() {
   if (!selectedDept.value || !selectedUser.value) return
   assigning.value = true
   try {
-    await departmentLeadsApi.assign(selectedDept.value, selectedUser.value)
+    await departmentLeadsApi.assign(selectedDept.value, selectedUser.value.id)
     const { data: leads } = await departmentLeadsApi.list(selectedDept.value)
     leadsByDept.value[selectedDept.value] = leads
-    selectedUser.value = ''
+    clearUser()
   } finally {
     assigning.value = false
   }
@@ -89,6 +138,8 @@ async function removeLead(deptId: string, userId: string) {
     <div v-else class="space-y-4">
       <!-- Assign form -->
       <div class="flex gap-2 flex-wrap items-end">
+
+        <!-- Отдел -->
         <div class="flex-1 min-w-[150px]">
           <label class="block text-xs text-gray-500 mb-1">Отдел</label>
           <select
@@ -99,14 +150,64 @@ async function removeLead(deptId: string, userId: string) {
             <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
           </select>
         </div>
-        <div class="flex-1 min-w-[150px]">
-          <label class="block text-xs text-gray-500 mb-1">ID пользователя (TEAM_LEAD)</label>
-          <input
-            v-model="selectedUser"
-            placeholder="UUID тимлида"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500 outline-none"
-          />
+
+        <!-- Поиск пользователя (autocomplete) -->
+        <div class="flex-1 min-w-[200px] relative">
+          <label class="block text-xs text-gray-500 mb-1">Тимлид</label>
+          <div class="relative">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            <input
+              v-model="searchQuery"
+              :class="[
+                'w-full pl-8 pr-7 py-2 border rounded-lg text-sm outline-none transition-colors',
+                selectedUser
+                  ? 'border-purple-400 bg-purple-50 text-purple-900 focus:ring-1 focus:ring-purple-400'
+                  : 'border-gray-300 focus:ring-1 focus:ring-primary-500',
+              ]"
+              placeholder="Поиск по имени или email..."
+              autocomplete="off"
+              @input="onSearchInput"
+              @focus="showDropdown = searchResults.length > 0"
+              @blur="onBlur"
+            />
+            <button
+              v-if="searchQuery"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              tabindex="-1"
+              @mousedown.prevent="clearUser"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+            <Loader2 v-if="searchLoading" class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin" />
+          </div>
+
+          <!-- Dropdown -->
+          <div
+            v-if="showDropdown && searchResults.length"
+            class="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+          >
+            <button
+              v-for="u in searchResults"
+              :key="u.id"
+              class="w-full text-left px-3 py-2 hover:bg-purple-50 transition-colors flex items-center justify-between gap-2"
+              @mousedown.prevent="selectUser(u)"
+            >
+              <div>
+                <p class="text-sm font-medium text-gray-900">{{ u.fullName }}</p>
+                <p class="text-xs text-gray-500">{{ u.email }}</p>
+              </div>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 shrink-0">
+                Тимлид
+              </span>
+            </button>
+          </div>
+
+          <!-- Выбран пользователь -->
+          <p v-if="selectedUser" class="mt-1 text-xs text-purple-600">
+            ✓ {{ selectedUser.email }}
+          </p>
         </div>
+
         <button
           class="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
           :disabled="!selectedDept || !selectedUser || assigning"

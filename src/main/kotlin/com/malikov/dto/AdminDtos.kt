@@ -34,6 +34,14 @@ data class TenantUsageResponse(
 )
 
 @Serializable
+data class UserSearchResponse(
+    val id: String,
+    val fullName: String,
+    val email: String,
+    val role: String,
+)
+
+@Serializable
 data class TenantUserResponse(
     val id: String,
     val email: String,
