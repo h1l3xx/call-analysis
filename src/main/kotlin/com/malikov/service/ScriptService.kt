@@ -35,6 +35,10 @@ class ScriptService(private val repo: ScriptRepository) {
         return getById(schema, scriptId)
     }
 
+    fun delete(schema: String, scriptId: UUID) {
+        if (!repo.delete(schema, scriptId)) throw NotFoundException("Script not found")
+    }
+
     fun update(schema: String, scriptId: UUID, request: UpdateScriptRequest): ScriptDetailResponse {
         val updated = repo.update(
             schema      = schema,

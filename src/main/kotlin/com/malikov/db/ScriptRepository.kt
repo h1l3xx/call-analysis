@@ -184,6 +184,11 @@ class ScriptRepository {
         scriptId
     }
 
+    fun delete(schema: String, scriptId: UUID): Boolean = transaction {
+        val s = TScripts(schema)
+        s.deleteWhere { s.id eq scriptId } > 0
+    }
+
     fun update(
         schema: String,
         scriptId: UUID,

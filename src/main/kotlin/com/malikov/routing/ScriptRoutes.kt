@@ -43,5 +43,12 @@ fun Route.scriptRoutes(service: ScriptService) {
             val request = call.receive<UpdateScriptRequest>()
             call.respond(service.update(p.schema!!, scriptId, request))
         }
+
+        delete("/{id}") {
+            val p = requireTenantRole(Role.CLIENT_ADMIN)
+            val scriptId = pathUuid("id")
+            service.delete(p.schema!!, scriptId)
+            call.respond(HttpStatusCode.NoContent)
+        }
     }
 }

@@ -20,4 +20,7 @@ export const scriptsApi = {
   update(id: string, data: UpdateScriptRequest) {
     return client.put<ScriptDetailResponse>(`/api/v1/scripts/${id}`, data)
   },
+  delete(id: string) {
+    return client.delete(`/api/v1/scripts/${id}`)
+  },
 }
