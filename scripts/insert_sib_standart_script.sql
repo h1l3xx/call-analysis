@@ -31,6 +31,8 @@ BEGIN
 
   -- ── 2. Критерии ───────────────────────────────────────────────────────────
 
+  DELETE FROM tenant_sib_standart.criteria WHERE script_id = v_script_id;
+
   INSERT INTO tenant_sib_standart.criteria (script_id, order_num, name, description, group_type, weight, scoring_type, is_active)
   VALUES
     (v_script_id, 1,
