@@ -125,7 +125,14 @@ const tabs = [
           </div>
           <div>
             <p class="text-xs text-gray-500">Скрипт</p>
-            <p class="text-sm font-medium text-gray-900">{{ call.scriptName || '—' }}</p>
+            <RouterLink
+              v-if="call.scriptId"
+              :to="{ name: 'script-detail', params: { id: call.scriptId } }"
+              class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              {{ call.scriptName }}
+            </RouterLink>
+            <p v-else class="text-sm font-medium text-gray-900">—</p>
           </div>
           <div>
             <p class="text-xs text-gray-500">Статус</p>
