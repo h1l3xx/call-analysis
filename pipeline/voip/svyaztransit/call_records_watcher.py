@@ -633,12 +633,14 @@ class CallRecordsWatcher:
     def process_new_records(self, records: List[CallRecord]) -> int:
         """Обработать новые записи: скачать всё, затем отправить одним батчем в Scanovich."""
         downloaded: List[tuple] = []  # (local_path, filename, record)
+        already_seen = 0
 
         for record in records:
             filename = self.generate_readable_filename(record)
             local_path = os.path.join(self.download_dir, filename)
 
             if self.db.is_record_downloaded(local_path):
+                already_seen += 1
                 self.logger.debug("Запись %s уже загружена", record.file_name)
                 continue
 
@@ -653,6 +655,11 @@ class CallRecordsWatcher:
                 downloaded.append((downloaded_path, filename, record))
                 time.sleep(1)
 
+        self.logger.info(
+            "📋 Итог скачивания: найдено=%d, уже было=%d, новых скачано=%d",
+            len(records), already_seen, len(downloaded),
+        )
+
         if not downloaded:
             return 0
 
@@ -661,16 +668,27 @@ class CallRecordsWatcher:
             batch_files = [(path, fname) for path, fname, _ in downloaded]
             upload_results = self.uploader.upload_batch(batch_files)
 
+            upload_ok_count = 0
+            upload_fail_count = 0
             for local_path, filename, _ in downloaded:
                 upload_ok = upload_results.get(local_path, False)
                 self.db.mark_record_uploaded(local_path, upload_ok)
 
-                if upload_ok and self.delete_after_upload:
-                    try:
-                        os.remove(local_path)
-                        self.logger.debug("Локальный файл удалён после загрузки: %s", filename)
-                    except Exception as exc:
-                        self.logger.warning("Не удалось удалить файл %s: %s", filename, exc)
+                if upload_ok:
+                    upload_ok_count += 1
+                    if self.delete_after_upload:
+                        try:
+                            os.remove(local_path)
+                            self.logger.debug("Локальный файл удалён после загрузки: %s", filename)
+                        except Exception as exc:
+                            self.logger.warning("Не удалось удалить файл %s: %s", filename, exc)
+                else:
+                    upload_fail_count += 1
+
+            self.logger.info(
+                "📤 Отправлено в Scanovich: %d файлов → принято=%d, ошибок=%d",
+                len(downloaded), upload_ok_count, upload_fail_count,
+            )
 
         return len(downloaded)
 
