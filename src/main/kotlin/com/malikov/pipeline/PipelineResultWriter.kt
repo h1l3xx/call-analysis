@@ -177,6 +177,11 @@ class PipelineResultWriter {
             it[qs.processedAt] = System.currentTimeMillis()
         }
 
+        if (scriptId != null) {
+            val cl = TCalls(schema)
+            cl.update({ cl.id eq callId }) { it[cl.scriptId] = scriptId }
+        }
+
         log.info("Quality from LLM saved for call {} [script={}, score={}]", callId, scriptId ?: "none", overallScore)
     }
 

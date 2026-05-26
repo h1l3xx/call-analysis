@@ -9,9 +9,6 @@ import com.malikov.pipeline.PipelineResultWriter
 import com.malikov.telegram.BatchNotificationService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
@@ -223,7 +220,7 @@ class BatchProcessingService(
         return callIds.size
     }
 
-    private suspend fun evaluateSingle(schema: String, callId: UUID) {
+    internal suspend fun evaluateSingle(schema: String, callId: UUID) {
         val call = callRepo.findById(schema, callId) ?: return
         val callType = call.callType ?: "unknown"
         val callDirection = resolveDirection(call)
@@ -237,13 +234,13 @@ class BatchProcessingService(
         )
 
         try {
-            val transcription = getTranscription(schema, callId)
+            val transcription = callRepo.findTranscription(schema, callId)
             if (transcription.isNullOrBlank()) {
                 log.warn("No transcription for call {}, skipping evaluation", callId)
                 return
             }
 
-            markAnalyzing(schema, callId)
+            callRepo.updateStatus(schema, callId, "analyzing")
 
             AppMetrics.llmEvaluationTimer.record(Runnable {
                 when {
@@ -273,7 +270,7 @@ class BatchProcessingService(
                 }
             })
 
-            markDone(schema, callId)
+            callRepo.updateStatus(schema, callId, "done", System.currentTimeMillis())
         } catch (e: Exception) {
             log.error("Evaluation failed for call {}", callId, e)
             resultWriter.markFailed(schema, callId, "evaluation", e.message ?: "Unknown error")
@@ -376,25 +373,6 @@ class BatchProcessingService(
             "external" -> "external_incoming"
             else -> "unknown"
         }
-
-    private fun getTranscription(schema: String, callId: UUID): String? = transaction {
-        val t = TTranscriptions(schema)
-        t.selectAll().where { t.callId eq callId }.singleOrNull()
-            ?.let { it[t.cleanedText] ?: it[t.rawText] }
-    }
-
-    private fun markAnalyzing(schema: String, callId: UUID) = transaction {
-        val cl = TCalls(schema)
-        cl.update({ cl.id eq callId }) { it[cl.status] = "analyzing" }
-    }
-
-    private fun markDone(schema: String, callId: UUID) = transaction {
-        val cl = TCalls(schema)
-        cl.update({ cl.id eq callId }) {
-            it[cl.status] = "done"
-            it[cl.finishedAt] = System.currentTimeMillis()
-        }
-    }
 
     fun shutdown() {
         scope.cancel("Application shutdown")

@@ -496,6 +496,20 @@ class CallRepository {
             .associate { it[m.id] to it[Users.fullName] }
     }
 
+    fun findTranscription(schema: String, callId: UUID): String? = transaction {
+        val t = TTranscriptions(schema)
+        t.selectAll().where { t.callId eq callId }.singleOrNull()
+            ?.let { it[t.cleanedText] ?: it[t.rawText] }
+    }
+
+    fun updateStatus(schema: String, callId: UUID, status: String, finishedAt: Long? = null) = transaction {
+        val cl = TCalls(schema)
+        cl.update({ cl.id eq callId }) {
+            it[cl.status] = status
+            if (finishedAt != null) it[cl.finishedAt] = finishedAt
+        }
+    }
+
     fun findIdsByManagerAndStatus(
         schema: String,
         managerId: UUID,
