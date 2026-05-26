@@ -462,16 +462,46 @@ class CallRecordsWatcher:
         filters = {
             'start_date': start_time.strftime('%d.%m.%Y %H:%M'),
             'end_date': end_time.strftime('%d.%m.%Y %H:%M'),
-            'records_per_page': '50'  # Больше записей для анализа
+            'records_per_page': str(self.filter_config.records_per_page),
         }
 
-        self.logger.info(f"Поиск записей за последние {hours_back} часов")
+        self.logger.info("Поиск записей за последние %d часов", hours_back)
         return self.get_filtered_records(filters)
 
+    def _fetch_page(self, params: dict, page: int) -> List[CallRecord]:
+        """Запросить одну страницу записей у Связьтранзита. Возвращает пустой список при ошибке."""
+        from bs4 import BeautifulSoup
+
+        page_params = {**params, 'PageNumber': str(page)}
+        try:
+            response = self.auth.session.post(
+                "https://lk.stranzit.ru/CallRecords/IndexGet",
+                data=page_params,
+                timeout=30,
+            )
+        except Exception as exc:
+            self.logger.error("Ошибка сети при запросе страницы %d: %s", page, exc)
+            return []
+
+        if response.status_code != 200:
+            self.logger.error("Ошибка получения страницы %d: HTTP %d", page, response.status_code)
+            return []
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        records_input = soup.find('input', {'name': 'callRecords'})
+        if not records_input:
+            return []
+
+        try:
+            records_data = json.loads(records_input.get('value', '[]'))
+            return [CallRecord(data) for data in records_data]
+        except json.JSONDecodeError as exc:
+            self.logger.error("Ошибка парсинга JSON на странице %d: %s", page, exc)
+            return []
+
     def get_filtered_records(self, filters: dict) -> List[CallRecord]:
-        """Получить записи звонков с пользовательскими фильтрами"""
-        # Параметры по умолчанию
-        default_params = {
+        """Получить записи звонков с пользовательскими фильтрами (все страницы)."""
+        params = {
             'StartDateTimeStr': '14.09.2025 00:00',
             'EndDateTimeStr': '21.09.2025 23:59',
             'PhoneNumberPart': '',
@@ -479,12 +509,9 @@ class CallRecordsWatcher:
             'CallDurationExpression': '0',  # 0=не выбрано, 1=>=, 2=<, 3==
             'CallDuration': '00:00:00',
             'RecordsPerPage': '50',
-            'PageNumber': '1',
-            'ShortCodesJson': '{}'
+            'ShortCodesJson': '{}',
         }
 
-        # Обновляем параметры из filters
-        params = default_params.copy()
         if 'start_date' in filters:
             params['StartDateTimeStr'] = filters['start_date']
         if 'end_date' in filters:
@@ -499,38 +526,32 @@ class CallRecordsWatcher:
             params['CallDuration'] = filters['duration']
         if 'records_per_page' in filters:
             params['RecordsPerPage'] = str(filters['records_per_page'])
-        if 'page' in filters:
-            params['PageNumber'] = str(filters['page'])
 
-        self.logger.info(f"Отправка запроса с фильтрами: {params['StartDateTimeStr']} - {params['EndDateTimeStr']}, Направление: {params['CallDirection']}")
+        per_page = int(params['RecordsPerPage'])
 
-        # Получаем HTML с записями
-        response = self.auth.session.post(
-            "https://lk.stranzit.ru/CallRecords/IndexGet",
-            data=params
+        self.logger.info(
+            "Запрос записей: %s — %s, направление=%s, страниц_размер=%d",
+            params['StartDateTimeStr'], params['EndDateTimeStr'],
+            params['CallDirection'], per_page,
         )
 
-        if response.status_code != 200:
-            self.logger.error(f"Ошибка получения данных: {response.status_code}")
-            return []
+        all_records: List[CallRecord] = []
+        page = 1
+        while True:
+            self.logger.debug("Загрузка страницы %d…", page)
+            page_records = self._fetch_page(params, page)
 
-        # Парсим JSON из HTML
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(response.text, 'html.parser')
-        records_input = soup.find('input', {'name': 'callRecords'})
+            all_records.extend(page_records)
+            self.logger.info("Страница %d: получено %d записей (всего: %d)", page, len(page_records), len(all_records))
 
-        if not records_input:
-            self.logger.warning("Не найдены данные записей")
-            return []
+            # Если записей меньше, чем размер страницы — это последняя страница
+            if len(page_records) < per_page:
+                break
 
-        try:
-            records_data = json.loads(records_input.get('value', '[]'))
-            records = [CallRecord(data) for data in records_data]
-            self.logger.info(f"Найдено {len(records)} записей")
-            return records
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Ошибка парсинга JSON: {e}")
-            return []
+            page += 1
+
+        self.logger.info("Итого найдено %d записей за %d стр.", len(all_records), page)
+        return all_records
 
     def generate_readable_filename(self, record: CallRecord) -> str:
         """Создать читаемое имя файла, совместимое с PhoneParser.
