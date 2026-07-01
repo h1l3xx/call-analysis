@@ -68,6 +68,7 @@ services:
       - pipeline_output:/home/asruser/app/output
       - pipeline_metadata:/home/asruser/app/metadata
       - pipeline_quality:/home/asruser/app/quality_analysis
+      - pipeline_model_cache:/home/asruser/.cache
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8001/healthz || exit 1"]
       interval: 15s
@@ -173,6 +174,7 @@ volumes:
   pipeline_output:
   pipeline_metadata:
   pipeline_quality:
+  pipeline_model_cache:
   caddy_data:
   caddy_config:
   stranzit_data:
