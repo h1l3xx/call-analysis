@@ -147,7 +147,7 @@ async function refreshStatus() {
           </div>
 
           <div class="text-sm text-gray-600 space-y-1">
-            <p><b>1.</b> Откройте Telegram-бота Malikov</p>
+            <p><b>1.</b> Откройте Telegram-бота Caller</p>
             <p><b>2.</b> Отправьте боту команду: <code class="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">/link {{ linkCode }}</code></p>
             <p><b>3.</b> Или просто отправьте код <code class="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">{{ linkCode }}</code></p>
           </div>

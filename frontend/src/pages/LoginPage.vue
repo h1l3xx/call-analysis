@@ -44,7 +44,7 @@ async function handleSubmit() {
   <div class="w-full max-w-md">
     <div class="login-card rounded-2xl shadow-xl p-8">
       <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold login-title">Malikov</h1>
+        <h1 class="text-3xl font-bold login-title">Caller</h1>
         <p class="mt-2 login-subtitle">Аналитика звонков</p>
       </div>
 

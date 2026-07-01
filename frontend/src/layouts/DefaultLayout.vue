@@ -75,7 +75,7 @@ async function handleLogout() {
       ]"
     >
       <div class="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-        <span class="text-xl font-bold text-primary-600">Malikov</span>
+        <span class="text-xl font-bold text-primary-600">Caller</span>
         <button class="lg:hidden text-gray-500" @click="sidebarOpen = false">
           <X class="w-5 h-5" />
         </button>
