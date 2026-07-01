@@ -37,8 +37,9 @@ ENV UV_HTTP_TIMEOUT=300
 RUN uv sync --frozen --no-dev --python python3.12
 
 # Upgrade PyTorch to support Blackwell (sm_120, RTX 5070+) — requires CUDA 12.8 + torch 2.7+
+# Only torch is upgraded; torchaudio stays at the version pinned by uv to avoid API breaks
 RUN VIRTUAL_ENV=/home/asruser/app/.venv uv pip install \
-    "torch>=2.7.0" "torchaudio>=2.7.0" \
+    "torch>=2.7.0" \
     --index-url https://download.pytorch.org/whl/cu128
 
 # Copy app code
