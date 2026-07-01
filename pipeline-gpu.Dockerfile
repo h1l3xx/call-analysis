@@ -32,13 +32,12 @@ WORKDIR /home/asruser/app
 # Copy dependency files first (better layer caching)
 COPY --chown=asruser:asruser pyproject.toml uv.lock uv.toml README.md ./
 
-# Install dependencies as root (uv needs write access), then fix ownership
+# Install dependencies, then replace torch/torchaudio with Blackwell-compatible versions.
+# Done in a single RUN to avoid Docker layer bloat from duplicate torch installs (~5-7GB).
 ENV UV_HTTP_TIMEOUT=300
-RUN uv sync --frozen --no-dev --python python3.12
-
-# Upgrade PyTorch to support Blackwell (sm_120, RTX 5070+) — requires CUDA 12.8 + torch 2.7+
-# Pin exact versions so torch and torchaudio binaries are compatible with each other
-RUN VIRTUAL_ENV=/home/asruser/app/.venv uv pip install \
+RUN uv sync --frozen --no-dev --python python3.12 && \
+    .venv/bin/python -m pip uninstall -y torch torchaudio 2>/dev/null || true && \
+    VIRTUAL_ENV=/home/asruser/app/.venv uv pip install \
     "torch==2.7.0+cu128" "torchaudio==2.7.0+cu128" \
     --index-url https://download.pytorch.org/whl/cu128
 
