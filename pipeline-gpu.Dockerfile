@@ -32,14 +32,17 @@ WORKDIR /home/asruser/app
 # Copy dependency files first (better layer caching)
 COPY --chown=asruser:asruser pyproject.toml uv.lock uv.toml README.md ./
 
-# Install dependencies, then replace torch/torchaudio with Blackwell-compatible versions.
-# Done in a single RUN to avoid Docker layer bloat from duplicate torch installs (~5-7GB).
+# Install deps, replace torch/torchaudio with Blackwell-compatible cu128 versions,
+# then purge all caches in one RUN so Docker layer contains only the final state.
 ENV UV_HTTP_TIMEOUT=300
+ENV UV_NO_CACHE=1
 RUN uv sync --frozen --no-dev --python python3.12 && \
-    .venv/bin/python -m pip uninstall -y torch torchaudio 2>/dev/null || true && \
+    .venv/bin/python -m pip uninstall -y torch torchaudio 2>/dev/null; \
     VIRTUAL_ENV=/home/asruser/app/.venv uv pip install \
     "torch==2.7.0+cu128" "torchaudio==2.7.0+cu128" \
-    --index-url https://download.pytorch.org/whl/cu128
+    --index-url https://download.pytorch.org/whl/cu128 \
+    --no-cache-dir && \
+    rm -rf /root/.cache /tmp/pip-* /tmp/*.whl
 
 # Copy app code
 COPY --chown=asruser:asruser src/ ./src/
