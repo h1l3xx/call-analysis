@@ -78,7 +78,9 @@ services:
           memory: 256m
 
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: caddy.Dockerfile
     container_name: malikov_caddy
     restart: unless-stopped
     ports:
@@ -86,6 +88,7 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:?Set DUCKDNS_TOKEN in .env}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

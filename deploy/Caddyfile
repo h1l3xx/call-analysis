@@ -1,11 +1,15 @@
 {
     log {
         output stdout
-        level debug
+        level info
     }
 }
 
 {$DOMAIN:localhost} {
+    tls {
+        dns duckdns {$DUCKDNS_TOKEN}
+    }
+
     route /grafana* {
         reverse_proxy grafana:3000 {
             header_up X-Forwarded-Prefix /grafana
