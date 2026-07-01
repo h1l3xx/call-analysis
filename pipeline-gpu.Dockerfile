@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    ln -s /root/.local/bin/uv /usr/local/bin/uv
+RUN curl -L https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C /usr/local/bin --strip-components=1 "uv-x86_64-unknown-linux-musl/uv"
 
 # Create app user
 RUN useradd --create-home --shell /bin/bash asruser
