@@ -1,5 +1,5 @@
 # GPU-enabled single-stage Dockerfile for AI audio-call pipeline.
-# NVIDIA CUDA 12.4 + Python 3.12 (deadsnakes) + uv package manager.
+# NVIDIA CUDA 12.8 + Python 3.12 (deadsnakes) + uv package manager.
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
@@ -37,10 +37,9 @@ ENV UV_HTTP_TIMEOUT=300
 RUN uv sync --frozen --no-dev --python python3.12
 
 # Upgrade PyTorch to support Blackwell (sm_120, RTX 5070+) — requires CUDA 12.8 + torch 2.7+
-RUN .venv/bin/pip install --upgrade \
+RUN VIRTUAL_ENV=/home/asruser/app/.venv uv pip install \
     "torch>=2.7.0" "torchaudio>=2.7.0" \
-    --index-url https://download.pytorch.org/whl/cu128 \
-    --quiet
+    --index-url https://download.pytorch.org/whl/cu128
 
 # Copy app code
 COPY --chown=asruser:asruser src/ ./src/
