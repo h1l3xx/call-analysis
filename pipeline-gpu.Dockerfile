@@ -52,9 +52,11 @@ COPY --chown=asruser:asruser config.example.yaml ./config.yaml
 COPY --chown=asruser:asruser branches.yaml* ./
 
 # Patch torch.load safe globals for PyTorch 2.6+ compatibility with speechbrain checkpoints.
-# TorchVersion is used in old-format model files; registering it avoids weights_only errors.
-RUN printf 'try:\n    import torch.torch_version as _tv, torch.serialization as _ts\n    _ts.add_safe_globals([_tv.TorchVersion])\nexcept Exception:\n    pass\n' \
-    > /home/asruser/app/.venv/lib/python3.12/site-packages/sitecustomize.py
+# Uses .pth + module approach since sitecustomize.py is not loaded from venv site-packages.
+RUN printf 'try:\n    import torch.torch_version as _t, torch.serialization as _s\n    _s.add_safe_globals([_t.TorchVersion])\nexcept Exception:\n    pass\n' \
+    > /home/asruser/app/.venv/lib/python3.12/site-packages/_torch_compat_patch.py && \
+    echo 'import _torch_compat_patch' \
+    > /home/asruser/app/.venv/lib/python3.12/site-packages/_torch_compat.pth
 
 RUN mkdir -p logs input output metadata archive analytics quality_analysis quarantine \
     && chown -R asruser:asruser /home/asruser/app
