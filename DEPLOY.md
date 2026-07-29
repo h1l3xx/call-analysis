@@ -114,6 +114,16 @@ nvidia-smi
 - **Frontend:** http://YOUR_SERVER_IP (порт 80)
 - **Backend API:** http://YOUR_SERVER_IP:8080
 
+> ⚠️ **Всегда используйте `scripts/deploy.sh`**, а не голый `docker compose up`.
+> `docker-compose.yml` сам по себе — это dev-конфигурация (CPU pipeline,
+> монтирует `pipeline/config.yaml` напрямую). Продовые настройки (GPU-образ
+> pipeline, `deploy/pipeline.prod.yaml`, лимиты памяти) лежат в
+> `docker-compose.prod.yml` и подключаются только через `-f` (как делает
+> `deploy.sh`) либо через `COMPOSE_FILE` в `.env` (уже настроено в
+> `.env.production.example`). Если всё же нужно вызвать `docker compose`
+> вручную — запускайте его из корня репозитория (`/opt/malikov`), а не из
+> `scripts/`, иначе легко случайно подхватить не тот compose-файл.
+
 ---
 
 ## Управление
