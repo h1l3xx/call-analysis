@@ -114,6 +114,13 @@ nvidia-smi
 - **Frontend:** http://YOUR_SERVER_IP (порт 80)
 - **Backend API:** http://YOUR_SERVER_IP:8080
 
+> 💡 Если ваш домен (DuckDNS и т.п.) резолвится в приватный IP сервера, а
+> роутер режет такие DNS-ответы (защита от DNS rebinding) и доступа к
+> настройкам роутера нет — используйте LAN-only адрес `<hostname>.local`
+> (Avahi/mDNS, ставится через `scripts/deploy.sh init`, см. `LOCAL_DOMAIN`
+> в `.env`). Сертификат для него самоподписанный (локальный CA Caddy),
+> браузер попросит подтвердить доверие при первом заходе.
+
 > ⚠️ **Всегда используйте `scripts/deploy.sh`**, а не голый `docker compose up`.
 > `docker-compose.yml` сам по себе — это dev-конфигурация (CPU pipeline,
 > монтирует `pipeline/config.yaml` напрямую). Продовые настройки (GPU-образ

@@ -18,3 +18,20 @@
 
     reverse_proxy frontend:80
 }
+
+# LAN-only доступ по mDNS-имени (см. scripts/deploy.sh -> avahi-daemon).
+# Не зависит от DuckDNS/публичного DNS и от rebind-protection на роутере,
+# т.к. .local резолвится через multicast DNS в пределах локальной сети.
+# Сертификат выпускается локальным CA Caddy (Let's Encrypt не подписывает
+# .local-имена) — при первом заходе браузер попросит подтвердить доверие.
+{$LOCAL_DOMAIN:whisperv-t.local} {
+    tls internal
+
+    route /grafana* {
+        reverse_proxy grafana:3000 {
+            header_up X-Forwarded-Prefix /grafana
+        }
+    }
+
+    reverse_proxy frontend:80
+}

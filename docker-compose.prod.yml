@@ -89,6 +89,7 @@ services:
     environment:
       DOMAIN: ${DOMAIN:-localhost}
       DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:?Set DUCKDNS_TOKEN in .env}
+      LOCAL_DOMAIN: ${LOCAL_DOMAIN:-whisperv-t.local}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -396,6 +396,19 @@ server_init() {
     log_error "GPU passthrough FAILED. Check NVIDIA drivers and reboot."
   fi
 
+  # Avahi (mDNS) — LAN-only доступ по <hostname>.local без публичного DNS/DuckDNS.
+  # Полезно, когда роутер режет DNS-ответы, резолвящие домен в приватный IP
+  # (DNS rebinding protection), а доступа к настройкам роутера нет.
+  if ! systemctl is-active --quiet avahi-daemon 2>/dev/null; then
+    log_info "Installing Avahi (mDNS) for <hostname>.local LAN access..."
+    apt-get update
+    apt-get install -y avahi-daemon avahi-utils
+    systemctl enable --now avahi-daemon
+    log_ok "Avahi installed. Server reachable at $(hostname).local on the LAN."
+  else
+    log_ok "Avahi (mDNS) already running: $(hostname).local"
+  fi
+
   # Firewall (open only needed ports)
   if command -v ufw &>/dev/null; then
     log_info "Configuring firewall..."
